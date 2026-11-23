@@ -1,0 +1,52 @@
+# --- Secrets (never commit) ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+frontend/.env.local
+*.tsbuildinfo
+npm-debug.log*
+
+# --- Model caches and weights (downloaded at runtime, never committed) ---
+.cache/
+models/
+*.onnx
+*.onnx_data
+*.safetensors
+*.bin
+
+# --- Runtime data (user uploads, built indexes) ---
+data/uploads/
+data/indexes/
+data/tmp/
+
+# Only openly licensed samples live here (see data/samples/SOURCES.md)
+!data/samples/
+
+# --- Eval: keep final results, ignore scratch runs ---
+eval/runs/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/settings.json
+.idea/
+_bootstrap/
