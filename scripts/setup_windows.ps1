@@ -58,8 +58,12 @@ if (-not (Test-Path $wslConfig)) {
     wsl --shutdown
 }
 $distro = (wsl -e bash -lc "grep PRETTY_NAME /etc/os-release" 2>$null)
-if (-not $distro) {
-    Fail "No WSL Linux distro found. Install one with:  wsl --install -d Ubuntu-24.04  then rerun this script."
+if ($LASTEXITCODE -ne 0 -or "$distro" -notmatch "PRETTY_NAME") {
+    $distro = $null
+    Fail "No WSL Linux distro found. Install Ubuntu on D: with:  wsl --install -d Ubuntu-24.04 --location D:\wsl\ubuntu  then rerun this script."
+    Write-Host "Skipping database steps." -ForegroundColor Yellow
+    Stop-Transcript | Out-Null
+    exit 1
 } else {
     Ok "WSL distro: $distro"
     Write-Host "WSL will ask for your Linux (sudo) password once." -ForegroundColor Yellow
