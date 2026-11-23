@@ -21,6 +21,20 @@ foreach ($t in "git", "uv", "wsl") {
     if (Get-Command $t -ErrorAction SilentlyContinue) { Ok "$t found" } else { Fail "$t not found" }
 }
 
+Step "Git: link this folder to github.com/realhamzamalik2/hanrag"
+if (-not (Test-Path "$Root\.git")) {
+    git init -q -b main
+    git remote add origin https://github.com/realhamzamalik2/hanrag.git
+    git fetch -q origin main
+    git reset -q origin/main          # keep local files, adopt the GitHub history
+    git checkout -q -- LICENSE
+}
+# Commits from this repo use the GitHub noreply address, never a personal email.
+git config user.name "realhamzamalik2"
+git config user.email "125865129+realhamzamalik2@users.noreply.github.com"
+git status --short | Select-Object -First 10
+Ok "Git linked (commit email: noreply)"
+
 Step "2/8 .env"
 if (-not (Test-Path "$Root\.env")) {
     Copy-Item "$Root\.env.example" "$Root\.env"
