@@ -1,12 +1,13 @@
 ﻿# HanRAG one-shot setup for Windows (PowerShell 5+).
 # Run from anywhere:
 #   powershell -ExecutionPolicy Bypass -File D:\projects\hanrag\scripts\setup_windows.ps1
-# Output is also saved to _bootstrap\setup_log.txt
+# Output is also saved to _bootstrap\setup_log_<timestamp>.txt
 
 $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent $PSScriptRoot
 New-Item -ItemType Directory -Force "$Root\_bootstrap" | Out-Null
-Start-Transcript -Path "$Root\_bootstrap\setup_log.txt" -Force | Out-Null
+$LogFile = "$Root\_bootstrap\setup_log_$(Get-Date -Format yyyyMMdd_HHmmss).txt"
+Start-Transcript -Path $LogFile -Force | Out-Null
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONUTF8 = "1"
 
@@ -94,5 +95,5 @@ if ($envText -match "GEMINI_API_KEY=\S+" -and $envText -match "GEMINI_MODEL=\S+"
 }
 
 Step "Done"
-Write-Host "Log saved to $Root\_bootstrap\setup_log.txt"
+Write-Host "Log saved to $LogFile"
 Stop-Transcript | Out-Null

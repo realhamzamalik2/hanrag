@@ -78,6 +78,8 @@ def markdown_to_pdf(md: str, title: str, source_url: str, path: Path) -> None:
     state = {"page": doc.new_page(width=595, height=842), "y": rect.y0, "empty": True}
 
     def place(text: str, size: float) -> bool:
+        if rect.y1 - state["y"] < size * 2:  # no room left on this page
+            return False
         box = pymupdf.Rect(rect.x0, state["y"], rect.x1, rect.y1)
         spare = state["page"].insert_textbox(box, text, fontsize=size, fontname="korea",
                                              lineheight=1.5)
@@ -122,6 +124,8 @@ def markdown_to_pdf(md: str, title: str, source_url: str, path: Path) -> None:
                 new_page()
 
     def fits(text: str, size: float) -> bool:
+        if rect.y1 - state["y"] < size * 2:
+            return False
         scratch = pymupdf.open()
         pg = scratch.new_page(width=595, height=842)
         box = pymupdf.Rect(rect.x0, state["y"], rect.x1, rect.y1)
@@ -153,6 +157,19 @@ def markdown_to_pdf(md: str, title: str, source_url: str, path: Path) -> None:
     doc.close()
 
 
+def save_article(lang: str, title: str, stem: str, md: str, url: str) -> Path:
+    if lang == "ko":
+        pdf_path = OUT / f"{stem}.pdf"
+        markdown_to_pdf(md, title, url, pdf_path)
+        with pymupdf.open(pdf_path) as d:
+            print(f"[done] {pdf_path.name} ({d.page_count} pages)")
+        return pdf_path
+    md_path = OUT / f"{stem}.md"
+    md_path.write_text(md, encoding="utf-8")
+    print(f"[done] {md_path.name}")
+    return md_path
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     sources: dict[str, dict[str, str]] = {}
@@ -164,16 +181,12 @@ def main() -> int:
                 print(f"[fail] {title}: {e}")
                 continue
             md = to_markdown(title, extract)
-            if lang == "ko":
-                pdf_path = OUT / f"{stem}.pdf"
-                markdown_to_pdf(md, title, url, pdf_path)
-                sources[pdf_path.name] = {"url": url, "license": LICENSE, "title": title}
-                print(f"[done] {pdf_path.name} ({pymupdf.open(pdf_path).page_count} pages)")
-            else:
-                md_path = OUT / f"{stem}.md"
-                md_path.write_text(md, encoding="utf-8")
-                sources[md_path.name] = {"url": url, "license": LICENSE, "title": title}
-                print(f"[done] {md_path.name}")
+            try:
+                saved = save_article(lang, title, stem, md, url)
+            except Exception as e:
+                print(f"[fail] {title}: {e}")
+                continue
+            sources[saved.name] = {"url": url, "license": LICENSE, "title": title}
             time.sleep(0.5)
 
     (OUT / "sources.json").write_text(json.dumps(sources, ensure_ascii=False, indent=2),
