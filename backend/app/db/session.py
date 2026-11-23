@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     return create_engine(get_settings().database_url, pool_pre_ping=True, pool_size=5,
-                         max_overflow=5)
+                         max_overflow=5, connect_args={"connect_timeout": 5})
 
 
 @lru_cache(maxsize=1)

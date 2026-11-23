@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
+
+# Windows without Developer Mode cannot create symlinks; HF cache still works, just copies.
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 
 def setup_logging(level: str = "INFO") -> None:
