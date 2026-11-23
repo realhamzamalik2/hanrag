@@ -49,4 +49,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    from sqlalchemy.exc import OperationalError
+
+    try:
+        sys.exit(main())
+    except OperationalError as e:
+        print(f"\nDatabase not reachable: {str(e).splitlines()[0]}")
+        print("Start it with:  powershell -ExecutionPolicy Bypass -File ..\\scripts\\start_db.ps1")
+        sys.exit(2)
