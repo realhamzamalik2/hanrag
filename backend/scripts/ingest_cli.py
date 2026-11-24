@@ -18,6 +18,9 @@ from app.ingestion.parsers import SUPPORTED_EXTENSIONS
 from app.ingestion.pipeline import ingest_file
 from app.logging_setup import setup_logging
 
+# Attribution/readme files that sit next to documents but are not documents.
+SKIP_FILES = {"SOURCES.md", "README.md", "LICENSE.md"}
+
 
 def load_sources(folder: Path) -> dict[str, dict[str, str]]:
     """Optional sources.json next to sample files: {filename: {url, license}}."""
@@ -35,7 +38,8 @@ def main() -> int:
     files: list[Path] = []
     for p in args.paths:
         if p.is_dir():
-            files += sorted(f for f in p.rglob("*") if f.suffix.lower() in SUPPORTED_EXTENSIONS)
+            files += sorted(f for f in p.rglob("*")
+                            if f.suffix.lower() in SUPPORTED_EXTENSIONS and f.name not in SKIP_FILES)
         elif p.suffix.lower() in SUPPORTED_EXTENSIONS:
             files.append(p)
         else:
