@@ -1,6 +1,8 @@
 // Typed client for the HanRAG FastAPI backend.
 
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+// Empty = same origin: Next.js forwards /api/* to the backend (see next.config.ts).
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+const API_LABEL = API_URL || "the HanRAG API";
 
 export type Mode = "vector" | "bm25" | "hybrid" | "hybrid_rerank";
 export type Tokenizer = "kiwi" | "whitespace";
@@ -147,7 +149,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     res = await fetch(`${API_URL}${path}`, init);
   } catch {
-    throw new ApiError(0, `Can't reach the HanRAG API at ${API_URL}. Start it with scripts\\run_api.ps1.`);
+    throw new ApiError(0, `Can't reach ${API_LABEL}. Start it with scripts\\run_api.ps1.`);
   }
   if (!res.ok) {
     let detail = res.statusText;
@@ -216,7 +218,7 @@ export async function streamChat(
     });
   } catch (e) {
     if ((e as Error).name === "AbortError") return;
-    throw new ApiError(0, `Can't reach the HanRAG API at ${API_URL}. Start it with scripts\\run_api.ps1.`);
+    throw new ApiError(0, `Can't reach ${API_LABEL}. Start it with scripts\\run_api.ps1.`);
   }
   if (!res.ok || !res.body) {
     let detail = res.statusText;
