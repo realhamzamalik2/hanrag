@@ -6,7 +6,9 @@ Docs:                 http://localhost:8000/docs
 
 from __future__ import annotations
 
+import faulthandler
 import logging
+import sys
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -25,6 +27,9 @@ from app.api.deps import limiter
 from app.config import get_settings
 from app.generation import llm
 from app.logging_setup import setup_logging
+
+# Print a Python traceback even when a native library (Kiwi, ONNX Runtime) crashes the process.
+faulthandler.enable(file=sys.stderr, all_threads=True)
 
 log = logging.getLogger("hanrag")
 _models_ready = threading.Event()
@@ -56,7 +61,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Load Kiwi on the main thread: its native init can overflow small worker-thread stacks.
     from app.ingestion.korean import get_kiwi
 
+    log.info("Loading Kiwi tokenizer")
     get_kiwi()
+    log.info("Kiwi ready")
     try:
         from app.db.session import init_db
 
