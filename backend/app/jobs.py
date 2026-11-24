@@ -37,7 +37,22 @@ class Job:
 
 _jobs: dict[str, Job] = {}
 _lock = threading.Lock()
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest")
+
+
+def _make_executor() -> ThreadPoolExecutor:
+    # Windows gives non-main threads a small stack; Kiwi's model loading and ONNX need more.
+    # stack_size() only affects threads created afterwards, so set it, create, restore.
+    old = threading.stack_size()
+    threading.stack_size(64 * 1024 * 1024)
+    try:
+        ex = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest")
+        ex.submit(lambda: None).result()  # start the worker thread now, with the big stack
+        return ex
+    finally:
+        threading.stack_size(old)
+
+
+_executor = _make_executor()
 
 
 def submit(path: Path, filename: str) -> Job:

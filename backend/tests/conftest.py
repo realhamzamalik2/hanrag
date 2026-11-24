@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from app.config import get_settings
-from app.ingestion.korean import tokenize_ko
+from app.ingestion.korean import get_kiwi, tokenize_ko
 
 
 class FakeEmbedder:
@@ -59,6 +59,11 @@ class FakeReranker:
         for r, item in enumerate(out, start=1):
             item.rank = r
         return out[:top_k]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _load_kiwi_on_main_thread():
+    get_kiwi()
 
 
 @pytest.fixture

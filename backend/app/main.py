@@ -31,14 +31,18 @@ _models_ready = threading.Event()
 
 
 def _warm_models() -> None:
-    """Load embedder + reranker in the background so the first question is fast."""
+    """Load models and build the BM25 index in the background so the first question is fast."""
     try:
+        from app.db.session import session_scope
+        from app.retrieval.bm25 import get_bm25
         from app.retrieval.embedder import get_embedder
         from app.retrieval.reranker import get_reranker
 
         get_embedder().embed_query("warm up")
         if get_settings().retrieval_mode == "hybrid_rerank":
             get_reranker()
+        with session_scope() as session:
+            get_bm25(session, get_settings().bm25_tokenizer)  # type: ignore[arg-type]
         _models_ready.set()
         log.info("Models ready")
     except Exception:
@@ -49,13 +53,20 @@ def _warm_models() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     s = get_settings()
     setup_logging(s.log_level)
+    # Load Kiwi on the main thread: its native init can overflow small worker-thread stacks.
+    from app.ingestion.korean import get_kiwi
+
+    get_kiwi()
     try:
         from app.db.session import init_db
 
         init_db()
     except Exception:
         log.exception("Database init failed; is PostgreSQL running?")
+    old = threading.stack_size()
+    threading.stack_size(64 * 1024 * 1024)
     threading.Thread(target=_warm_models, name="warmup", daemon=True).start()
+    threading.stack_size(old)
     yield
 
 
