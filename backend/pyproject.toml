@@ -37,6 +37,7 @@ dev = [
     "pytest-asyncio>=1.0",
     "ruff>=0.8",
     "mypy>=1.13",
+    "onnx>=1.17",
 ]
 
 [tool.uv]
@@ -62,6 +63,7 @@ ignore = ["SIM105"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501"]
 "tests/conftest.py" = ["E501", "E402"]
+"tests/test_onnx_backends.py" = ["E402"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]

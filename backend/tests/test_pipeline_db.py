@@ -52,3 +52,22 @@ def test_ingest_retrieve_answer(clean_db, fake_models, monkeypatch, tmp_path: Pa
     a2 = rag.answer_question("What is the GDP of Mars?", k=2, rewrite=False)
     assert a2.refused and a2.answer.startswith("I don't know")
     assert a2.refusal_reason
+
+
+def test_reranker_failure_falls_back_to_fused(clean_db, fake_models, monkeypatch, tmp_path: Path):
+    from app.db.session import session_scope
+    from app.ingestion.pipeline import ingest_file
+    from app.retrieval.hybrid import retrieve
+
+    md = tmp_path / "fallback.md"
+    md.write_text(MD, encoding="utf-8")
+    ingest_file(md)
+
+    def no_memory():
+        raise RuntimeError("bad allocation")
+
+    monkeypatch.setattr("app.retrieval.reranker.get_reranker", no_memory)
+    with session_scope() as s:
+        res = retrieve(s, "한글 창제", mode="hybrid_rerank", k_final=2)
+    assert res.final and not res.reranked
+    assert res.warnings and "bad allocation" in res.warnings[0]

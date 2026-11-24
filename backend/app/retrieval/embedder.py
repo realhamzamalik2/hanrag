@@ -18,7 +18,6 @@ import logging
 import threading
 import time
 from collections.abc import Sequence
-from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -35,22 +34,16 @@ class OnnxInt8Backend:
     """Plain onnxruntime + tokenizers; reads the `dense_vecs` output."""
 
     def __init__(self, repo: str, cache_dir: str, threads: int, max_length: int) -> None:
-        import onnxruntime as ort
         from huggingface_hub import snapshot_download
         from tokenizers import Tokenizer
+
+        from app.retrieval.onnx_utils import make_session
 
         local = Path(snapshot_download(repo, cache_dir=cache_dir, allow_patterns=INT8_FILES))
         self.tokenizer = Tokenizer.from_file(str(local / "tokenizer.json"))
         self.tokenizer.enable_truncation(max_length=max_length)
         self.tokenizer.enable_padding(pad_id=1, pad_token="<pad>")  # XLM-R pad id
-        opts = ort.SessionOptions()
-        opts.intra_op_num_threads = threads
-        opts.inter_op_num_threads = 1
-        # The memory arena keeps peak allocations around forever; off = lower RSS.
-        opts.enable_cpu_mem_arena = False
-        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self.session = ort.InferenceSession(str(local / "model_quantized.onnx"), opts,
-                                            providers=["CPUExecutionProvider"])
+        self.session = make_session(local / "model_quantized.onnx", threads)
         self.input_names = {i.name for i in self.session.get_inputs()}
         outputs = [o.name for o in self.session.get_outputs()]
         self.output = "dense_vecs" if "dense_vecs" in outputs else outputs[0]
@@ -138,6 +131,15 @@ class Embedder:
         return self.embed([query])[0]
 
 
-@lru_cache(maxsize=1)
+_instance: Embedder | None = None
+_load_lock = threading.Lock()
+
+
 def get_embedder() -> Embedder:
-    return Embedder()
+    """Load once, even if several requests ask at the same time (others wait)."""
+    global _instance
+    if _instance is None:
+        with _load_lock:
+            if _instance is None:
+                _instance = Embedder()
+    return _instance

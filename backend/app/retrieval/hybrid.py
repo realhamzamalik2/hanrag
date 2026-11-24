@@ -11,6 +11,7 @@ Each stage's ranked list is kept so the UI can show "How I found this" side by s
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -22,6 +23,8 @@ from app.retrieval.bm25 import TokenizerName, bm25_search
 from app.retrieval.fusion import reciprocal_rank_fusion
 from app.retrieval.types import RetrievedChunk
 from app.retrieval.vector import vector_search
+
+log = logging.getLogger(__name__)
 
 Mode = Literal["vector", "bm25", "hybrid", "hybrid_rerank"]
 MODES: tuple[str, ...] = ("vector", "bm25", "hybrid", "hybrid_rerank")
@@ -38,6 +41,7 @@ class RetrievalResult:
     reranked: list[RetrievedChunk] = field(default_factory=list)
     final: list[RetrievedChunk] = field(default_factory=list)
     stages_ms: dict[str, float] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def top_score(self) -> float:
@@ -63,7 +67,7 @@ class RetrievalResult:
             "tokenizer": self.tokenizer,
             "lists": {name: pack(items) for name, items in self.lists.items()},
             "fused": pack(self.fused), "reranked": pack(self.reranked),
-            "final": pack(self.final), "stages_ms": self.stages_ms,
+            "final": pack(self.final), "stages_ms": self.stages_ms, "warnings": self.warnings,
         }
 
 
@@ -106,12 +110,15 @@ def retrieve(session: Session, query: str, *, mode: Mode = "hybrid_rerank",
 
     rerank = mode == "hybrid_rerank" if use_reranker is None else use_reranker
     if rerank and res.fused:
-        from app.retrieval.reranker import get_reranker
+        from app.retrieval import reranker as rr
 
         candidates = res.fused[: s.top_k_rerank]
-        res.reranked = _timed(res.stages_ms, "rerank", get_reranker().rerank, query,
-                              candidates, len(candidates))
-        res.final = res.reranked[:k_final]
-    else:
-        res.final = res.fused[:k_final]
+        try:
+            res.reranked = _timed(res.stages_ms, "rerank", rr.get_reranker().rerank, query,
+                                  candidates, len(candidates))
+        except Exception as e:  # noqa: BLE001
+            # e.g. not enough free RAM to load the cross-encoder: answer from fused results.
+            log.warning("Reranker unavailable, using fused ranking: %s", e)
+            res.warnings.append(f"reranker unavailable: {str(e)[:200]}")
+    res.final = (res.reranked or res.fused)[:k_final]
     return res
