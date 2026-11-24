@@ -44,11 +44,14 @@ def _warm_models() -> None:
         from app.retrieval.reranker import get_reranker
 
         get_embedder().embed_query("warm up")
-        if get_settings().retrieval_mode == "hybrid_rerank":
-            get_reranker()
         with session_scope() as session:
             get_bm25(session, get_settings().bm25_tokenizer)  # type: ignore[arg-type]
-        _models_ready.set()
+        _models_ready.set()  # answering works from here; the reranker is optional
+        if get_settings().retrieval_mode == "hybrid_rerank":
+            try:
+                get_reranker()
+            except Exception as e:  # noqa: BLE001
+                log.warning("Reranker not loaded (answers use hybrid ranking): %s", e)
         log.info("Models ready")
     except Exception:
         log.exception("Model warm-up failed")
@@ -109,8 +112,11 @@ def health() -> dict[str, Any]:
             conn.execute(text("SELECT 1"))
     except Exception:
         db_ok = False
+    from app.retrieval.reranker import reranker_status
+
     return {"status": "ok" if db_ok else "degraded", "database": db_ok,
-            "models_ready": _models_ready.is_set(), "llm_configured": llm.is_configured()}
+            "models_ready": _models_ready.is_set(), "reranker": reranker_status(),
+            "llm_configured": llm.is_configured()}
 
 
 @app.get("/api/config", tags=["system"])

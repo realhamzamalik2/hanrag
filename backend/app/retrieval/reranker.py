@@ -99,13 +99,37 @@ class Reranker:
 
 _instance: Reranker | None = None
 _load_lock = threading.Lock()
+_failed_at: float | None = None
+_last_error = ""
+RETRY_AFTER_S = 300  # after a failed load (usually not enough free RAM), wait before retrying
+
+
+class RerankerUnavailable(RuntimeError):
+    pass
 
 
 def get_reranker() -> Reranker:
-    """Load once, even if several requests ask at the same time (others wait)."""
-    global _instance
-    if _instance is None:
-        with _load_lock:
-            if _instance is None:
+    """Load once, even if several requests ask at the same time (others wait).
+
+    If loading fails, fail fast for RETRY_AFTER_S instead of retrying on every question.
+    """
+    global _instance, _failed_at, _last_error
+    if _instance is not None:
+        return _instance
+    if _failed_at is not None and time.monotonic() - _failed_at < RETRY_AFTER_S:
+        raise RerankerUnavailable(_last_error)
+    with _load_lock:
+        if _instance is None:
+            try:
                 _instance = Reranker()
+                _failed_at = None
+            except Exception as e:
+                _failed_at, _last_error = time.monotonic(), str(e)[:300]
+                raise RerankerUnavailable(_last_error) from e
     return _instance
+
+
+def reranker_status() -> str:
+    if _instance is not None:
+        return "ready"
+    return "failed" if _failed_at is not None else "not_loaded"
