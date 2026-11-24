@@ -29,5 +29,10 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='hanrag'" | g
 
 sudo -u postgres psql -d hanrag -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
+# Separate database for automated tests (they truncate tables).
+sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='hanrag_test'" | grep -q 1 \
+  || sudo -u postgres createdb -O hanrag hanrag_test
+sudo -u postgres psql -d hanrag_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
 echo "Done. Test from Windows: psql or the Step 1 healthcheck script."
 psql "postgresql://hanrag:hanrag_dev@localhost:5432/hanrag" -c "SELECT extversion FROM pg_extension WHERE extname='vector';"

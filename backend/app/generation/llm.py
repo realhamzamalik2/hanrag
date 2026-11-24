@@ -55,6 +55,23 @@ def _config(system: str):  # type: ignore[no-untyped-def]
     )
 
 
+def is_configured() -> bool:
+    s = get_settings()
+    return bool(s.gemini_api_key and s.gemini_model)
+
+
+def generate_json(system: str, prompt: str) -> tuple[str, Usage]:
+    from google.genai import types
+
+    config = types.GenerateContentConfig(system_instruction=system, temperature=0.0,
+                                         response_mime_type="application/json")
+    resp = _client().models.generate_content(
+        model=get_settings().gemini_model, contents=prompt, config=config)
+    um = getattr(resp, "usage_metadata", None)
+    return resp.text or "{}", Usage(getattr(um, "prompt_token_count", None),
+                                     getattr(um, "candidates_token_count", None))
+
+
 def generate(system: str, prompt: str) -> tuple[str, Usage]:
     resp = _client().models.generate_content(
         model=get_settings().gemini_model, contents=prompt, config=_config(system))

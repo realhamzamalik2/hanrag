@@ -1,0 +1,117 @@
+"""Retrieval orchestrator: BM25 + vectors -> RRF -> reranker, with every stage recorded.
+
+Modes (also the ablation study arms):
+  vector         dense only
+  bm25           keyword only
+  hybrid         BM25 + dense fused with RRF
+  hybrid_rerank  hybrid, then cross-encoder rerank (default)
+
+Each stage's ranked list is kept so the UI can show "How I found this" side by side.
+"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+from sqlalchemy.orm import Session
+
+from app.config import get_settings
+from app.retrieval.bm25 import TokenizerName, bm25_search
+from app.retrieval.fusion import reciprocal_rank_fusion
+from app.retrieval.types import RetrievedChunk
+from app.retrieval.vector import vector_search
+
+Mode = Literal["vector", "bm25", "hybrid", "hybrid_rerank"]
+MODES: tuple[str, ...] = ("vector", "bm25", "hybrid", "hybrid_rerank")
+
+
+@dataclass
+class RetrievalResult:
+    query: str
+    extra_queries: list[str]
+    mode: str
+    tokenizer: str
+    lists: dict[str, list[RetrievedChunk]] = field(default_factory=dict)
+    fused: list[RetrievedChunk] = field(default_factory=list)
+    reranked: list[RetrievedChunk] = field(default_factory=list)
+    final: list[RetrievedChunk] = field(default_factory=list)
+    stages_ms: dict[str, float] = field(default_factory=dict)
+
+    @property
+    def top_score(self) -> float:
+        return self.final[0].score if self.final else 0.0
+
+    def to_debug(self, limit: int = 10) -> dict[str, Any]:
+        """Compact structure for traces and the debug panel."""
+
+        def pack(items: list[RetrievedChunk]) -> list[dict[str, Any]]:
+            return [
+                {"chunk_id": c.chunk_id, "document_id": c.document_id,
+                 "doc_title": c.doc_title, "page": c.page, "section": c.section,
+                 "paginated": c.paginated, "lang": c.lang, "rank": c.rank,
+                 "score": round(c.score, 5),
+                 "scores": {k: round(v, 5) if isinstance(v, float) else v
+                            for k, v in c.scores.items()},
+                 "text": c.text[:400]}
+                for c in items[:limit]
+            ]
+
+        return {
+            "query": self.query, "extra_queries": self.extra_queries, "mode": self.mode,
+            "tokenizer": self.tokenizer,
+            "lists": {name: pack(items) for name, items in self.lists.items()},
+            "fused": pack(self.fused), "reranked": pack(self.reranked),
+            "final": pack(self.final), "stages_ms": self.stages_ms,
+        }
+
+
+def _timed(stages: dict[str, float], name: str, fn, *args, **kwargs):  # type: ignore[no-untyped-def]
+    t = time.perf_counter()
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        stages[name] = round(stages.get(name, 0.0) + (time.perf_counter() - t) * 1000, 1)
+
+
+def retrieve(session: Session, query: str, *, mode: Mode = "hybrid_rerank",
+             tokenizer: TokenizerName = "kiwi", extra_queries: list[str] | None = None,
+             k_final: int | None = None, document_ids: list[str] | None = None,
+             use_reranker: bool | None = None) -> RetrievalResult:
+    s = get_settings()
+    k_final = k_final or s.top_k_final
+    extra = [q for q in (extra_queries or []) if q and q.strip() and q != query]
+    res = RetrievalResult(query=query, extra_queries=extra, mode=mode, tokenizer=tokenizer)
+    queries = [("", query)] + [(f":{i + 1}", q) for i, q in enumerate(extra)]
+
+    if mode in ("bm25", "hybrid", "hybrid_rerank"):
+        for suffix, q in queries:
+            hits = _timed(res.stages_ms, "bm25", bm25_search, session, q, s.top_k_bm25,
+                          tokenizer)
+            if document_ids:
+                hits = [h for h in hits if h.document_id in document_ids]
+            res.lists[f"bm25{suffix}"] = hits
+    if mode in ("vector", "hybrid", "hybrid_rerank"):
+        for suffix, q in queries:
+            res.lists[f"vector{suffix}"] = _timed(res.stages_ms, "vector", vector_search,
+                                                  session, q, s.top_k_vector, document_ids)
+
+    if len(res.lists) == 1:
+        (only,) = res.lists.values()
+        res.fused = only
+    else:
+        res.fused = _timed(res.stages_ms, "fusion", reciprocal_rank_fusion, res.lists,
+                           s.rrf_k)
+
+    rerank = mode == "hybrid_rerank" if use_reranker is None else use_reranker
+    if rerank and res.fused:
+        from app.retrieval.reranker import get_reranker
+
+        candidates = res.fused[: s.top_k_rerank]
+        res.reranked = _timed(res.stages_ms, "rerank", get_reranker().rerank, query,
+                              candidates, len(candidates))
+        res.final = res.reranked[:k_final]
+    else:
+        res.final = res.fused[:k_final]
+    return res

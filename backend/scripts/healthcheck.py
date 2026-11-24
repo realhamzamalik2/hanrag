@@ -75,6 +75,27 @@ def main() -> int:
             print("       Fallback: set EMBED_BACKEND=sentence-transformers in .env and run "
                   "uv sync --extra st")
 
+    if not args.skip_models and s.retrieval_mode == "hybrid_rerank":
+        try:
+            from app.retrieval.reranker import get_reranker
+            from app.retrieval.types import RetrievedChunk
+
+            def rc(t: str) -> RetrievedChunk:
+                return RetrievedChunk(t, "d", "", "", 1, "", t, 0, 1, "ko", True, 0.0)
+
+            t0 = time.perf_counter()
+            ranked = get_reranker().rerank("한글은 누가 만들었나요?",
+                                           [rc("김치는 발효 음식이다."),
+                                            rc("세종대왕이 한글을 창제했다.")], 2)
+            good = ranked[0].text.startswith("세종")
+            print(f"{OK if good else FAIL} Reranker {s.rerank_model}: "
+                  f"relevant {ranked[0].score:.3f} vs unrelated {ranked[1].score:.3f} "
+                  f"({time.perf_counter() - t0:.1f}s incl. load)")
+            failed |= not good
+        except Exception as e:
+            failed = True
+            print(f"{FAIL} Reranker: {e}")
+
     print("\nAll checks passed." if not failed else "\nSome checks failed.")
     return 1 if failed else 0
 

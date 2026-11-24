@@ -4,6 +4,10 @@
 
 $Distro = "Ubuntu-24.04"
 wsl -d $Distro -u root -e service postgresql start | Out-Host
+# Ensure the separate test database exists (tests truncate tables, never touch "hanrag").
+$Root = Split-Path -Parent $PSScriptRoot
+$wslRoot = "/mnt/" + $Root.Substring(0, 1).ToLower() + $Root.Substring(2).Replace("\", "/")
+wsl -d $Distro -u postgres -e bash "$wslRoot/scripts/ensure_test_db.sh" | Out-Host
 
 # One hidden "sleep infinity" process keeps the distro (and Postgres) running.
 # Note: pass ONE argument string; Start-Process does not quote array items.

@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     # If the best passage is below this cosine similarity, refuse without calling the LLM.
     # Saves free-tier quota on clearly unanswerable questions. Tuned in the eval (Step 4).
     min_vector_score: float = 0.35
+    # Same idea for the reranker's 0..1 relevance probability (used in hybrid_rerank mode).
+    min_rerank_score: float = 0.05
+    retrieval_mode: str = "hybrid_rerank"  # vector | bm25 | hybrid | hybrid_rerank
+    bm25_tokenizer: str = "kiwi"  # kiwi | whitespace
+    # One extra LLM call per question: standalone rewrite (multi-turn) + ko<->en translation.
+    query_rewrite: bool = True
 
     # App
     data_dir: Path = Field(default=ROOT_DIR / "data")
