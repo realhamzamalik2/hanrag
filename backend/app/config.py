@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     rerank_model: str = "BAAI/bge-reranker-v2-m3-int8"
     model_cache_dir: str = str(ROOT_DIR / ".cache" / "models")
     onnx_threads: int = 4
+    # Cross-encoder memory/latency knobs for small machines (8 GB RAM, 2-core CPU).
+    rerank_batch_size: int = 2
+    rerank_max_chars: int = 600
 
     # Chunking
     chunk_max_chars: int = 700
@@ -44,7 +47,7 @@ class Settings(BaseSettings):
     # Retrieval
     top_k_bm25: int = 30
     top_k_vector: int = 30
-    top_k_rerank: int = 20
+    top_k_rerank: int = 12
     top_k_final: int = 5
     rrf_k: int = 60
     # If the best passage is below this cosine similarity, refuse without calling the LLM.

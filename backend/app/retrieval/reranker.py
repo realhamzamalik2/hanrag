@@ -35,15 +35,18 @@ class Reranker:
         self._model = TextCrossEncoder(s.rerank_model, cache_dir=s.model_cache_dir,
                                        threads=s.onnx_threads)
         self._lock = threading.Lock()
+        self.batch_size = s.rerank_batch_size
+        self.max_chars = s.rerank_max_chars
         log.info("Loaded reranker %s in %.1fs", s.rerank_model, time.perf_counter() - t0)
 
     def rerank(self, query: str, chunks: list[RetrievedChunk], top_k: int
                ) -> list[RetrievedChunk]:
         if not chunks:
             return []
-        docs = [f"{c.doc_title} {c.section}\n{c.text}" for c in chunks]
+        # Short inputs + small batches keep peak RAM low (long pairs blow up attention memory).
+        docs = [f"{c.doc_title} {c.section}\n{c.text}"[: self.max_chars] for c in chunks]
         with self._lock:
-            logits = list(self._model.rerank(query, docs, batch_size=8))
+            logits = list(self._model.rerank(query, docs, batch_size=self.batch_size))
         out: list[RetrievedChunk] = []
         for c, logit in zip(chunks, logits, strict=True):
             item = copy.copy(c)

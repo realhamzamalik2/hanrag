@@ -79,10 +79,9 @@ def fake_models(monkeypatch, tmp_path):
 def clean_db():
     from sqlalchemy import text
 
+    from app.config import get_settings as gs
     from app.db.session import get_engine, init_db
     from app.retrieval.bm25 import invalidate_bm25
-
-    from app.config import get_settings as gs
 
     assert gs().database_url.endswith("_test"), "refusing to truncate a non-test database"
     try:
