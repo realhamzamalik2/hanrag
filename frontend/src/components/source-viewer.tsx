@@ -23,8 +23,14 @@ export interface SourceRef {
   text?: string;
 }
 
-export function sourceLocation(ref: Pick<SourceRef, "paginated" | "page" | "section">, t: ReturnType<typeof useI18n>["t"]) {
-  return ref.paginated ? t("source.page", { n: ref.page }) : ref.section || t("source.part", { n: ref.page });
+export function sourceLocation(
+  ref: Pick<SourceRef, "paginated" | "page" | "section"> & { doc_title?: string },
+  t: ReturnType<typeof useI18n>["t"],
+) {
+  if (ref.paginated) return t("source.page", { n: ref.page });
+  // Markdown files often start with the title as a heading; showing it twice adds nothing.
+  const section = ref.section && ref.section !== ref.doc_title ? ref.section : "";
+  return section || t("source.part", { n: ref.page });
 }
 
 /** Paginated (PDF): the page with the passage highlighted. Otherwise: all passages, cited one marked. */

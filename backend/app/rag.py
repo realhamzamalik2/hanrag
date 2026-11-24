@@ -82,12 +82,15 @@ def gate(res: RetrievalResult) -> str | None:
     return None
 
 
-def _prepare(question: str, history: list[dict[str, str]] | None, opts: Options,
-             tracer: Tracer, use_llm: bool) -> tuple[Rewrite, RetrievalResult]:
-    rw = Rewrite(question, None, False, llm.Usage())
+def _rewrite(question: str, history: list[dict[str, str]] | None, opts: Options,
+             tracer: Tracer, use_llm: bool) -> Rewrite:
     if use_llm and llm.is_configured() and (opts.rewrite or history):
         with tracer.stage("rewrite"):
-            rw = rewrite_query(question, history, translate=opts.rewrite)
+            return rewrite_query(question, history, translate=opts.rewrite)
+    return Rewrite(question, None, False, llm.Usage())
+
+
+def _retrieve(rw: Rewrite, opts: Options, tracer: Tracer) -> RetrievalResult:
     extra = [rw.translation] if rw.translation else []
     with session_scope() as session:
         res = retrieve(session, rw.standalone, mode=opts.mode,  # type: ignore[arg-type]
@@ -96,7 +99,13 @@ def _prepare(question: str, history: list[dict[str, str]] | None, opts: Options,
     for name, ms in res.stages_ms.items():
         tracer.stages_ms[f"retrieve_{name}"] = ms
     tracer.retrieval = res.to_debug()
-    return rw, res
+    return res
+
+
+def _prepare(question: str, history: list[dict[str, str]] | None, opts: Options,
+             tracer: Tracer, use_llm: bool) -> tuple[Rewrite, RetrievalResult]:
+    rw = _rewrite(question, history, opts, tracer, use_llm)
+    return rw, _retrieve(rw, opts, tracer)
 
 
 def _finish(text_raw: str, question: str, chunks: list[RetrievedChunk]
@@ -147,14 +156,15 @@ def answer_question_stream(question: str, history: list[dict[str, str]] | None =
     rewrite -> retrieval -> token* -> done   (or error at any point)."""
     opts = Options.build(mode, tokenizer, k, rewrite, document_ids)
     tracer = Tracer(question, mode=opts.mode)
+    rw = _rewrite(question, history, opts, tracer, use_llm=True)
+    yield {"type": "rewrite", "standalone": rw.standalone, "translation": rw.translation}
     try:
-        rw, res = _prepare(question, history, opts, tracer, use_llm=True)
+        res = _retrieve(rw, opts, tracer)
     except Exception as e:
         log.exception("Retrieval failed")
-        tracer.save(error=f"retrieval: {e}")
+        tracer.save(error=f"retrieval: {e}", rewritten_query=rw.standalone)
         yield {"type": "error", "message": f"Retrieval failed: {e}"}
         return
-    yield {"type": "rewrite", "standalone": rw.standalone, "translation": rw.translation}
     chunks = res.final
     yield {"type": "retrieval", "retrieval": res.to_debug(),
            "passages": [{"number": i, **c.to_dict()} for i, c in enumerate(chunks, start=1)]}

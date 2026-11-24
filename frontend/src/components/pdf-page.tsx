@@ -4,6 +4,7 @@ import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { TextContent, TextItem } from "pdfjs-dist/types/src/display/api";
 import { Document, Page, pdfjs } from "react-pdf";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
@@ -47,13 +48,53 @@ export default function PdfPage({
     return () => ro.disconnect();
   }, []);
 
-  const renderText = useCallback(
-    ({ str }: { str: string }) => {
-      const s = squash(str);
-      if (target && s.length >= 3 && target.includes(s)) return `<mark>${escapeHtml(str)}</mark>`;
-      return escapeHtml(str);
+  // Indices of the text items that make up the cited passage on this page.
+  const [marked, setMarked] = useState<Set<number>>(new Set());
+
+  const locatePassage = useCallback(
+    (content: TextContent) => {
+      if (!target) return setMarked(new Set());
+      // Concatenate the page's text (whitespace removed) and remember where each item sits.
+      const spans: [number, number][] = [];
+      let page = "";
+      for (const item of content.items) {
+        const s = "str" in item ? squash((item as TextItem).str) : "";
+        spans.push([page.length, page.length + s.length]);
+        page += s;
+      }
+      // Find the passage by its opening and closing words (robust to small extraction diffs).
+      const findPrefix = (text: string, from = 0) => {
+        for (const n of [40, 24, 12]) {
+          if (text.length < n) continue;
+          const i = page.indexOf(text.slice(0, n), from);
+          if (i !== -1) return i;
+        }
+        return page.indexOf(text, from);
+      };
+      const start = findPrefix(target);
+      if (start === -1) return setMarked(new Set());
+      let end = start + target.length;
+      for (const n of [40, 24, 12]) {
+        if (target.length < n) continue;
+        const j = page.indexOf(target.slice(-n), start);
+        if (j !== -1) {
+          end = j + n;
+          break;
+        }
+      }
+      const hit = new Set<number>();
+      spans.forEach(([a, b], i) => {
+        if (b > a && a < end && b > start) hit.add(i);
+      });
+      setMarked(hit);
     },
     [target],
+  );
+
+  const renderText = useCallback(
+    ({ str, itemIndex }: { str: string; itemIndex: number }) =>
+      marked.has(itemIndex) ? `<mark>${escapeHtml(str)}</mark>` : escapeHtml(str),
+    [marked],
   );
 
   const scrollToHighlight = useCallback(() => {
@@ -73,6 +114,7 @@ export default function PdfPage({
           pageNumber={page}
           width={width}
           customTextRenderer={renderText}
+          onGetTextSuccess={locatePassage}
           onRenderTextLayerSuccess={scrollToHighlight}
           renderAnnotationLayer={false}
           className="overflow-hidden rounded-md border border-mist shadow-sm"

@@ -81,9 +81,13 @@ export default function EvaluationPage() {
                       {t(`chat.mode.${tr.mode}` as MessageKey)}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={tr.refused ? "outline" : "default"}>
-                        {tr.refused ? t("eval.refused") : t("eval.answered")}
-                      </Badge>
+                      {tr.error && !tr.refused && !tr.answer ? (
+                        <Badge variant="seal">{t("eval.failed")}</Badge>
+                      ) : (
+                        <Badge variant={tr.refused ? "outline" : "default"}>
+                          {tr.refused ? t("eval.refused") : t("eval.answered")}
+                        </Badge>
+                      )}
                     </td>
                     <td className="py-3 pl-4">
                       <p className="mb-1.5 tabular-nums">{formatMs(tr.total_ms)}</p>

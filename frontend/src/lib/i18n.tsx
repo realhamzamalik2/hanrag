@@ -115,6 +115,7 @@ const en = {
   "eval.col.result": "Result",
   "eval.answered": "Answered",
   "eval.refused": "Refused",
+  "eval.failed": "Failed",
 
   "api.offline": "The HanRAG API isn't running. Start it with scripts\\run_api.ps1, then reload.",
   "api.warming": "Loading search models. The first answer may take a little longer.",
@@ -233,6 +234,7 @@ const ko: Record<MessageKey, string> = {
   "eval.col.result": "결과",
   "eval.answered": "답변",
   "eval.refused": "거절",
+  "eval.failed": "실패",
 
   "api.offline": "HanRAG API가 실행되고 있지 않습니다. scripts\\run_api.ps1로 시작한 뒤 새로고침하세요.",
   "api.warming": "검색 모델을 불러오는 중입니다. 첫 답변은 조금 더 걸릴 수 있습니다.",
