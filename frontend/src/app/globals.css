@@ -1,0 +1,175 @@
+@import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+@import "@fontsource-variable/noto-serif-kr";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  HanRAG palette: ink, Goryeo celadon, and the red name seal (도장).
+  Seal red is reserved for citations, the one thing users should always find.
+*/
+:root {
+  --ink: #15202b;
+  --paper: #f6f8f7;
+  --surface: #ffffff;
+  --mist: #dce4e1;
+  --muted: #5b6b70;
+  --celadon: #4e8f82;
+  --celadon-deep: #2c6359;
+  --celadon-wash: #e6f0ed;
+  --seal: #b93a32;
+  --seal-wash: #f7e4e2;
+  --focus: #2c6359;
+}
+
+.dark {
+  --ink: #e4ebe8;
+  --paper: #0f1a20;
+  --surface: #15232b;
+  --mist: #26363e;
+  --muted: #93a6ab;
+  --celadon: #7fbfb1;
+  --celadon-deep: #a7d8cc;
+  --celadon-wash: #1b3132;
+  --seal: #e0605a;
+  --seal-wash: #3a2224;
+  --focus: #a7d8cc;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-mist: var(--mist);
+  --color-muted: var(--muted);
+  --color-celadon: var(--celadon);
+  --color-celadon-deep: var(--celadon-deep);
+  --color-celadon-wash: var(--celadon-wash);
+  --color-seal: var(--seal);
+  --color-seal-wash: var(--seal-wash);
+  --font-sans: "Pretendard Variable", Pretendard, system-ui, sans-serif;
+  --font-serif: "Noto Serif KR Variable", "Noto Serif KR", Georgia, serif;
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss06";
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all; /* Korean: break between words, not inside them */
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--celadon-wash);
+}
+
+/* Reading text: answers and source passages */
+.prose-reading {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.85;
+  max-width: 68ch;
+}
+.prose-reading p + p {
+  margin-top: 0.9em;
+}
+.prose-reading ul,
+.prose-reading ol {
+  margin: 0.6em 0 0.6em 1.2em;
+}
+.prose-reading ul {
+  list-style: disc;
+}
+.prose-reading ol {
+  list-style: decimal;
+}
+.prose-reading strong {
+  font-weight: 650;
+}
+
+/* Streaming caret */
+.caret::after {
+  content: "";
+  display: inline-block;
+  width: 0.5ch;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--celadon);
+  animation: blink 1s steps(2) infinite;
+}
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* PDF passage highlight (react-pdf text layer) */
+.react-pdf__Page__textContent mark {
+  background: color-mix(in srgb, var(--seal) 28%, transparent);
+  color: transparent;
+  border-radius: 2px;
+}
+.react-pdf__Page {
+  background: white !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* Seal: the citation marker, styled after a Korean name seal (도장) */
+.seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35em;
+  height: 1.35em;
+  padding: 0 0.2em;
+  margin: 0 0.12em;
+  border: 1.5px solid var(--seal);
+  border-radius: 3px;
+  color: var(--seal);
+  background: var(--seal-wash);
+  font-family: var(--font-serif);
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 0.28em;
+  cursor: pointer;
+  transition: background-color 120ms, color 120ms;
+}
+.seal:hover,
+.seal[data-active="true"] {
+  background: var(--seal);
+  color: var(--surface);
+}
