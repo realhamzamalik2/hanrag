@@ -47,6 +47,12 @@ def main() -> int:
                 "SELECT extversion FROM pg_extension WHERE extname='vector'")).scalar()
             n = conn.execute(text("SELECT count(*) FROM chunks")).scalar()
         print(f"{OK} PostgreSQL + pgvector {v} (chunks indexed: {n})")
+        from app.db.session import embedder_id, get_meta
+
+        built = get_meta("embedder")
+        if n and built != embedder_id():
+            print(f"{WARN} Index built with {built or 'an older model'}, settings say "
+                  f"{embedder_id()}. Run: uv run python -m scripts.reembed")
     except Exception as e:
         failed = True
         print(f"{FAIL} Database ({s.database_url.split('@')[-1]}): {e}")

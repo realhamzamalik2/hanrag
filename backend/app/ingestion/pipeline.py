@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db.models import Chunk, Document
-from app.db.session import session_scope
+from app.db.session import embedder_id, get_meta, session_scope, set_meta
 from app.ingestion.chunker import chunk_document
 from app.ingestion.parsers import parse_file
 from app.retrieval.embedder import get_embedder
@@ -50,6 +50,10 @@ def ingest_file(path: Path, *, source_url: str | None = None, license: str | Non
     t0 = time.perf_counter()
     report = progress or (lambda stage, frac: None)
     digest = sha256_file(path)
+    indexed_with = get_meta("embedder")
+    if indexed_with and indexed_with != embedder_id():
+        raise RuntimeError(f"Index was built with {indexed_with} but EMBED_* now says "
+                           f"{embedder_id()}. Run: uv run python -m scripts.reembed")
 
     with session_scope() as session:
         existing = session.scalar(select(Document).where(Document.sha256 == digest))
@@ -102,6 +106,8 @@ def ingest_file(path: Path, *, source_url: str | None = None, license: str | Non
             doc.num_chars = sum(len(p.text) for p in parsed.pages)
             doc.lang = langs.most_common(1)[0][0]
             doc.status = "ready"
+            if indexed_with is None:
+                set_meta("embedder", embedder_id())
             doc.ingest_ms = (time.perf_counter() - t0) * 1000
             report("done", 1.0)
             log.info("Indexed %s: %d pages, %d chunks in %.1fs", path.name, doc.num_pages,

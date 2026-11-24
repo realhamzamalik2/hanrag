@@ -82,6 +82,15 @@ class Chunk(Base):
     )
 
 
+class AppMeta(Base):
+    """Small key/value store, e.g. which embedding model built the vector index."""
+
+    __tablename__ = "app_meta"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+
+
 class Trace(Base):
     """One row per question: per-stage latency, retrieved chunks, tokens. Feeds the debug panel."""
 

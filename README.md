@@ -38,13 +38,14 @@ QUERY    question + history
 | **Hybrid search** | Vectors capture meaning and work across languages; BM25 nails exact terms (names, years, rare words). Each covers the other's blind spot. |
 | **Kiwi tokenizer for BM25** | `훈민정음은` and `훈민정음을` both become `훈민정음`, so Korean queries match. Whitespace BM25 misses these. |
 | **RRF fusion** | BM25 and cosine scores live on different scales. RRF only uses ranks (`1/(60+rank)`), so no fragile score normalization. |
+| **int8 bge-m3** | The fp32 model needs about 2.3 GB of RAM and crashed next to the reranker on an 8 GB laptop. Dynamic int8 quantization cuts it to about 570 MB; the eval measures the quality cost. |
 | **Cross-encoder reranker** | Reads query and passage together, fixing ordering mistakes from both retrievers. Its 0 to 1 score also drives early refusal. |
 | **Query translation** | BM25 cannot match an English query to Korean text. Searching with both the question and its translation fixes that. |
 | **Refusal gate + refusal token** | Clearly unanswerable questions are refused before calling the LLM (saves quota); borderline ones are refused by the model itself. |
 
 ## Tech stack
 
-Python 3.11, FastAPI, PostgreSQL 16 + pgvector, SQLAlchemy 2, Kiwi (kiwipiepy), BAAI/bge-m3, BAAI/bge-reranker-v2-m3 (int8 ONNX via fastembed), Gemini API, Next.js + TypeScript + Tailwind + shadcn/ui.
+Python 3.11, FastAPI, PostgreSQL 16 + pgvector, SQLAlchemy 2, Kiwi (kiwipiepy), BAAI/bge-m3 (int8 ONNX), BAAI/bge-reranker-v2-m3 (int8 ONNX via fastembed), Gemini API, Next.js + TypeScript + Tailwind + shadcn/ui.
 
 Everything runs on CPU and fits on an 8 GB RAM laptop.
 
@@ -99,6 +100,7 @@ uv run pytest -m db           # pipeline + API tests on a separate hanrag_test d
 | Component | License |
 |---|---|
 | [BAAI/bge-m3](https://huggingface.co/BAAI/bge-m3) | MIT |
+| [gpahal/bge-m3-onnx-int8](https://huggingface.co/gpahal/bge-m3-onnx-int8) (int8 export of bge-m3) | MIT |
 | [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3) | Apache-2.0 |
 | [Kiwi / kiwipiepy](https://github.com/bab2min/kiwipiepy) | LGPL-3.0 |
 | [PyMuPDF](https://github.com/pymupdf/PyMuPDF) | AGPL-3.0 |

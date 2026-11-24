@@ -12,6 +12,7 @@ $env:PYTHONUTF8 = "1"
 Set-Location "$Root\backend"
 uv sync -q
 uv run pytest -q
+uv run python -m scripts.reembed
 uv run python -m scripts.healthcheck
 uv run python -m scripts.ingest_cli ../data/samples
 

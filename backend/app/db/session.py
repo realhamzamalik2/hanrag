@@ -48,3 +48,23 @@ def init_db() -> None:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(engine)
     log.info("Database schema ready")
+
+
+def get_meta(key: str) -> str | None:
+    from app.db.models import AppMeta
+
+    with session_scope() as s:
+        row = s.get(AppMeta, key)
+        return row.value if row else None
+
+
+def set_meta(key: str, value: str) -> None:
+    from app.db.models import AppMeta
+
+    with session_scope() as s:
+        s.merge(AppMeta(key=key, value=value))
+
+
+def embedder_id() -> str:
+    st = get_settings()
+    return f"{st.embed_backend}:{st.embed_model}"

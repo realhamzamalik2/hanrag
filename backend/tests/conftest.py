@@ -89,6 +89,6 @@ def clean_db():
     except Exception as e:  # pragma: no cover
         pytest.skip(f"test database not available: {e}")
     with get_engine().begin() as conn:
-        conn.execute(text("TRUNCATE documents, chunks, traces CASCADE"))
+        conn.execute(text("TRUNCATE documents, chunks, traces, app_meta CASCADE"))
     invalidate_bm25()
     yield

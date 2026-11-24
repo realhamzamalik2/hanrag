@@ -28,10 +28,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://hanrag:hanrag_dev@localhost:5432/hanrag"
 
     # Models
-    embed_backend: Literal["fastembed", "sentence-transformers"] = "fastembed"
-    embed_model: str = "BAAI/bge-m3"
+    embed_backend: Literal["onnx-int8", "fastembed", "sentence-transformers"] = "onnx-int8"
+    embed_model: str = "gpahal/bge-m3-onnx-int8"
     embed_dim: int = 1024
-    embed_batch_size: int = 8
+    embed_batch_size: int = 4
+    embed_max_length: int = 512
     rerank_model: str = "BAAI/bge-reranker-v2-m3-int8"
     model_cache_dir: str = str(ROOT_DIR / ".cache" / "models")
     onnx_threads: int = 4
