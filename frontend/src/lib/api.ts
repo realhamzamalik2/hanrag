@@ -119,6 +119,52 @@ export interface TraceSummary {
   error: string | null;
 }
 
+export interface RetrievalMetrics {
+  "recall@1": number;
+  "recall@3": number;
+  "recall@5": number;
+  "recall@10": number;
+  "mrr@10": number;
+  n?: number;
+}
+
+export interface EvalArm {
+  id: string;
+  label: string;
+  mode: Mode;
+  tokenizer: Tokenizer;
+  overall: RetrievalMetrics;
+  by_type: Record<string, RetrievalMetrics>;
+  latency_ms: { mean: number; p50: number; p95: number };
+}
+
+export interface EvalSummary {
+  generated_at: string;
+  dataset: { n: number; by_type: Record<string, number> };
+  models: { embedder: string; reranker: string; llm: string };
+  retrieval?: {
+    arms: EvalArm[];
+    refusal_gate: {
+      current: number;
+      sweep: { threshold: number; unanswerable_refused: number; answerable_refused: number }[];
+    };
+  };
+  generation?: {
+    n: number;
+    answer_correct: number;
+    answer_correct_when_answered: number;
+    citation_grounded: number;
+    faithful: number | null;
+    judged: number;
+    unanswerable_refused: number;
+    answerable_refused: number;
+    by_type: Record<string, { n: number; correct?: number; refused: number }>;
+    latency_ms: Record<string, number>;
+    total_ms: { mean: number; p50: number; p95: number };
+    retrieval_with_translation: RetrievalMetrics & { by_type: Record<string, RetrievalMetrics> };
+  };
+}
+
 export interface Health {
   status: string;
   database: boolean;
@@ -181,6 +227,7 @@ export const api = {
   },
   job: (id: string) => request<Job>(`/api/jobs/${id}`),
   traces: (limit = 30) => request<TraceSummary[]>(`/api/traces?limit=${limit}`),
+  evaluation: () => request<EvalSummary>("/api/eval"),
 };
 
 // ---- Streaming chat (Server-Sent Events over POST) ----

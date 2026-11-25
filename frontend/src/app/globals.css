@@ -20,6 +20,9 @@
   --seal: #b93a32;
   --seal-wash: #f7e4e2;
   --focus: #2c6359;
+  /* Two-series chart pair, validated for colour-blind separation (dataviz validator) */
+  --chart-a: #1f6fb0;
+  --chart-b: #c2452f;
 }
 
 .dark {
@@ -34,6 +37,8 @@
   --seal: #e0605a;
   --seal-wash: #3a2224;
   --focus: #a7d8cc;
+  --chart-a: #4a96d6;
+  --chart-b: #e0654f;
 }
 
 @theme inline {
@@ -47,6 +52,8 @@
   --color-celadon-wash: var(--celadon-wash);
   --color-seal: var(--seal);
   --color-seal-wash: var(--seal-wash);
+  --color-chart-a: var(--chart-a);
+  --color-chart-b: var(--chart-b);
   --font-sans: "Pretendard Variable", Pretendard, system-ui, sans-serif;
   --font-serif: "Noto Serif KR Variable", "Noto Serif KR", Georgia, serif;
 }

@@ -119,6 +119,21 @@ def health() -> dict[str, Any]:
             "llm_configured": llm.is_configured()}
 
 
+@app.get("/api/eval", tags=["evaluation"])
+def evaluation_results() -> dict[str, Any]:
+    """Benchmark results written by scripts/run_eval.py (eval/results/summary.json)."""
+    import json
+
+    from fastapi import HTTPException
+
+    from app.config import ROOT_DIR
+
+    path = ROOT_DIR / "eval" / "results" / "summary.json"
+    if not path.exists():
+        raise HTTPException(404, "No evaluation results yet. Run: uv run python -m scripts.run_eval")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 @app.get("/api/config", tags=["system"])
 def config() -> dict[str, Any]:
     s = get_settings()

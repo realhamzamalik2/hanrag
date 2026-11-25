@@ -108,6 +108,10 @@ def ingest_file(path: Path, *, source_url: str | None = None, license: str | Non
             doc.status = "ready"
             if indexed_with is None:
                 set_meta("embedder", embedder_id())
+            if parsed.file_type == "pdf" and get_meta("pdf_parser_version") is None:
+                from app.ingestion.parsers.pdf import PARSER_VERSION
+
+                set_meta("pdf_parser_version", PARSER_VERSION)
             doc.ingest_ms = (time.perf_counter() - t0) * 1000
             report("done", 1.0)
             log.info("Indexed %s: %d pages, %d chunks in %.1fs", path.name, doc.num_pages,
