@@ -31,11 +31,19 @@ def make_session(model_path: Path, threads: int):  # type: ignore[no-untyped-def
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
         try:
             return ort.InferenceSession(str(optimized), opts, providers=providers)
-        except Exception:  # corrupted/partial file: rebuild it below
-            log.warning("Optimized model %s unreadable, rebuilding", optimized.name)
-            optimized.unlink(missing_ok=True)
+        except Exception as e:
+            # Usually "bad allocation" (not enough free RAM), which says nothing about the
+            # file. Never delete it here; report the real cause instead of retrying heavier.
+            if _is_memory_error(e):
+                raise MemoryError(
+                    f"Not enough free memory to load {model_path.name}. Close other apps "
+                    "(browsers use the most) or enlarge the Windows paging file.") from e
+            log.warning("Optimized model %s failed to load (%s); using the original",
+                        optimized.name, e)
+            return _load_plain(model_path, opts, providers)
 
     # First run: optimize once and save. Fall back to basic optimization if memory is tight.
+    last: Exception | None = None
     for level in (ort.GraphOptimizationLevel.ORT_ENABLE_ALL,
                   ort.GraphOptimizationLevel.ORT_ENABLE_BASIC):
         opts.graph_optimization_level = level
@@ -45,9 +53,26 @@ def make_session(model_path: Path, threads: int):  # type: ignore[no-untyped-def
             log.info("Saved optimized model to %s", optimized)
             return session
         except Exception as e:  # noqa: BLE001
+            last = e
             log.warning("Loading %s with %s failed (%s); retrying lighter", model_path.name,
                         level, e)
-            optimized.unlink(missing_ok=True)
+            optimized.unlink(missing_ok=True)  # a half-written file from this attempt
+    if last is not None and _is_memory_error(last):
+        raise MemoryError(
+            f"Not enough free memory to load {model_path.name}. Close other apps "
+            "(browsers use the most) or enlarge the Windows paging file.") from last
+    opts.optimized_model_filepath = ""
+    return _load_plain(model_path, opts, providers)
+
+
+def _load_plain(model_path: Path, opts, providers):  # type: ignore[no-untyped-def]
+    import onnxruntime as ort
+
     opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
     opts.optimized_model_filepath = ""
     return ort.InferenceSession(str(model_path), opts, providers=providers)
+
+
+def _is_memory_error(e: Exception) -> bool:
+    msg = str(e).lower()
+    return isinstance(e, MemoryError) or "bad allocation" in msg or "bad_alloc" in msg
