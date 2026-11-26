@@ -19,6 +19,7 @@ from typing import Any, Literal
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.ingestion.korean import detect_lang
 from app.retrieval.bm25 import TokenizerName, bm25_search
 from app.retrieval.fusion import reciprocal_rank_fusion
 from app.retrieval.types import RetrievedChunk
@@ -79,6 +80,28 @@ def _timed(stages: dict[str, float], name: str, fn, *args, **kwargs):  # type: i
         stages[name] = round(stages.get(name, 0.0) + (time.perf_counter() - t) * 1000, 1)
 
 
+def match_query_language(query: str, extra: list[str], chunks: list[RetrievedChunk]
+                         ) -> list[str] | None:
+    """Pick, per passage, the query variant written in the passage's language.
+
+    The cross-encoder scores an English question against a Korean passage much lower than
+    the same question in Korean (0.03 vs 0.9 in the eval), which made the refusal gate reject
+    answerable cross-lingual questions. Same number of pairs, so no extra rerank time.
+    """
+    by_lang: dict[str, str] = {}
+    for q in [query, *extra]:
+        lang = detect_lang(q)
+        if lang in ("ko", "en"):
+            by_lang.setdefault(lang, q)
+    if len(by_lang) < 2:
+        return None
+    out = []
+    for c in chunks:
+        lang = detect_lang(c.text)
+        out.append(by_lang.get(lang, query))
+    return out
+
+
 def retrieve(session: Session, query: str, *, mode: Mode = "hybrid_rerank",
              tokenizer: TokenizerName = "kiwi", extra_queries: list[str] | None = None,
              k_final: int | None = None, document_ids: list[str] | None = None,
@@ -113,9 +136,11 @@ def retrieve(session: Session, query: str, *, mode: Mode = "hybrid_rerank",
         from app.retrieval import reranker as rr
 
         candidates = res.fused[: s.top_k_rerank]
+        pair_queries = (match_query_language(query, extra, candidates)
+                        if s.rerank_match_lang and extra else None)
         try:
             res.reranked = _timed(res.stages_ms, "rerank", rr.get_reranker().rerank, query,
-                                  candidates, len(candidates))
+                                  candidates, len(candidates), pair_queries=pair_queries)
         except Exception as e:  # noqa: BLE001
             # e.g. not enough free RAM to load the cross-encoder: answer from fused results.
             log.warning("Reranker unavailable, using fused ranking: %s", e)

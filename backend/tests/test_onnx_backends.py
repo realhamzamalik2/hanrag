@@ -86,4 +86,6 @@ def test_onnx_reranker(tmp_path: Path, monkeypatch):
     assert len(out) == 3 and all(0.0 <= c.score <= 1.0 for c in out)
     assert [c.rank for c in out] == [1, 2, 3]
     assert out[0].scores["fused_rank"] in (1, 2, 3)
+    paired = r.rerank("한글", chunks, 3, pair_queries=["kimchi", "Hangul", "word"])
+    assert len(paired) == 3 and all(0.0 <= c.score <= 1.0 for c in paired)
     get_settings.cache_clear()

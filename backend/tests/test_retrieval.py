@@ -53,3 +53,18 @@ def test_rrf_rewards_agreement_and_records_ranks():
 def test_rrf_limit():
     fused = reciprocal_rank_fusion({"a": [_rc(str(i)) for i in range(10)]}, limit=3)
     assert len(fused) == 3
+
+
+def _chunk(cid: str, text: str) -> RetrievedChunk:
+    return RetrievedChunk(cid, "d", "t", "f", 1, "", text, 0, 1, "ko", True, 0.0)
+
+
+def test_rerank_query_matches_passage_language():
+    from app.retrieval.hybrid import match_query_language
+
+    chunks = [_chunk("a", "경복궁은 1395년에 창건되었다."), _chunk("b", "RAG was proposed in 2020.")]
+    q, tr = "When was Gyeongbokgung built?", "경복궁은 언제 지어졌나요?"
+    assert match_query_language(q, [tr], chunks) == [tr, q]
+    # No translation in the other language: keep the plain single-query path.
+    assert match_query_language(q, [], chunks) is None
+    assert match_query_language(q, ["When was it built?"], chunks) is None

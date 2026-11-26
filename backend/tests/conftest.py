@@ -42,12 +42,12 @@ class FakeEmbedder:
 class FakeReranker:
     """Scores by morpheme overlap, squashed to 0..1."""
 
-    def rerank(self, query, chunks, top_k):
+    def rerank(self, query, chunks, top_k, pair_queries=None):
         import copy
 
-        q = set(tokenize_ko(query))
         out = []
-        for c in chunks:
+        for i, c in enumerate(chunks):
+            q = set(tokenize_ko(pair_queries[i] if pair_queries else query))
             item = copy.copy(c)
             item.scores = dict(c.scores)
             item.scores["fused_rank"] = c.rank

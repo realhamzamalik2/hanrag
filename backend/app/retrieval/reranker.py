@@ -61,10 +61,13 @@ class Reranker:
         self._lock = threading.Lock()
         log.info("Loaded reranker %s in %.1fs", s.rerank_model, time.perf_counter() - t0)
 
-    def scores(self, query: str, docs: list[str]) -> list[float]:
+    def scores(self, query: str | list[str], docs: list[str]) -> list[float]:
+        """Cross-encoder logits. `query` may be one string or one query per document."""
+        queries = [query] * len(docs) if isinstance(query, str) else query
+        pairs = list(zip(queries, docs, strict=True))
         out: list[float] = []
-        for i in range(0, len(docs), self.batch_size):
-            enc = self.tokenizer.encode_batch([(query, d) for d in docs[i:i + self.batch_size]])
+        for i in range(0, len(pairs), self.batch_size):
+            enc = self.tokenizer.encode_batch(pairs[i:i + self.batch_size])
             feeds = {
                 "input_ids": np.array([e.ids for e in enc], dtype=np.int64),
                 "attention_mask": np.array([e.attention_mask for e in enc], dtype=np.int64),
@@ -75,14 +78,15 @@ class Reranker:
             out.extend(float(x) for x in np.asarray(logits).reshape(len(enc), -1)[:, 0])
         return out
 
-    def rerank(self, query: str, chunks: list[RetrievedChunk], top_k: int
-               ) -> list[RetrievedChunk]:
+    def rerank(self, query: str, chunks: list[RetrievedChunk], top_k: int,
+               pair_queries: list[str] | None = None) -> list[RetrievedChunk]:
+        """Score each chunk against `query`, or against pair_queries[i] when given."""
         if not chunks:
             return []
         # Short inputs + small batches keep peak RAM low (long pairs blow up attention memory).
         docs = [f"{c.doc_title} {c.section}\n{c.text}"[: self.max_chars] for c in chunks]
         with self._lock:
-            logits = self.scores(query, docs)
+            logits = self.scores(pair_queries or query, docs)
         out: list[RetrievedChunk] = []
         for c, logit in zip(chunks, logits, strict=True):
             item = copy.copy(c)

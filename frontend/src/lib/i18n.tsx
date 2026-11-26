@@ -143,6 +143,13 @@ const en = {
   "eval.faithful": "Answers fully supported by their citations",
   "eval.falseRefusal": "Answerable questions refused",
   "eval.stageTime": "Average time per step",
+  "eval.sameLanguage": "Answers written in the question's language",
+  "eval.change.title": "What error analysis fixed",
+  "eval.change.body":
+    "The first full run answered English questions in Korean, refused English questions about Korean documents, and added citations to passages that did not state the fact. Three fixes: the answer language is detected in code and stated in the prompt, the reranker scores each passage with the question in that passage's language, and the prompt allows only directly supporting citations.",
+  "eval.change.before": "First run",
+  "eval.change.after": "After fixes",
+  "eval.change.lower": "lower is better",
   "eval.dataset": "{n} questions: {ko} Korean, {en} English, {cross} cross-lingual, {un} unanswerable. Generated {at}.",
   "eval.run": "Run the benchmark with: cd backend; uv run python -m scripts.run_eval",
 
@@ -289,6 +296,13 @@ const ko: Record<MessageKey, string> = {
   "eval.correct": "필수 사실을 모두 포함한 답변",
   "eval.grounded": "근거 구절을 인용한 답변",
   "eval.faithful": "인용으로 완전히 뒷받침되는 답변",
+  "eval.sameLanguage": "질문과 같은 언어로 작성된 답변",
+  "eval.change.title": "오류 분석으로 고친 점",
+  "eval.change.body":
+    "첫 전체 실행에서는 영어 질문에 한국어로 답하고, 한국어 문서에 대한 영어 질문을 거절하고, 사실이 없는 구절까지 인용했습니다. 세 가지를 고쳤습니다. 답변 언어를 코드에서 감지해 프롬프트에 명시하고, 리랭커가 각 구절을 그 구절과 같은 언어의 질문으로 평가하며, 사실을 직접 담은 구절만 인용하도록 했습니다.",
+  "eval.change.before": "첫 실행",
+  "eval.change.after": "수정 후",
+  "eval.change.lower": "낮을수록 좋음",
   "eval.falseRefusal": "답할 수 있는데 거절한 질문",
   "eval.stageTime": "단계별 평균 시간",
   "eval.dataset": "질문 {n}개: 한국어 {ko}, 영어 {en}, 언어 간 {cross}, 답 없음 {un}. {at} 생성.",

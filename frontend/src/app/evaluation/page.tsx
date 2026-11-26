@@ -5,11 +5,56 @@ import { useEffect, useState } from "react";
 import { StageBar } from "@/components/chat/retrieval-panel";
 import { AblationChart, ArmTable, GateChart } from "@/components/eval/charts";
 import { Badge } from "@/components/ui/badge";
-import { api, type EvalArm, type EvalSummary, type Stats, type TraceSummary } from "@/lib/api";
+import { api, type BaselineKey, type EvalArm, type EvalSummary, type Stats, type TraceSummary } from "@/lib/api";
 import { useI18n, type MessageKey } from "@/lib/i18n";
 import { formatMs, formatNumber } from "@/lib/utils";
 
 const pct = (v: number | null | undefined) => (v == null ? "–" : `${Math.round(v * 100)}%`);
+
+const CHANGE_ROWS: { key: BaselineKey; label: MessageKey; lowerIsBetter?: boolean }[] = [
+  { key: "answer_correct", label: "eval.correct" },
+  { key: "same_language", label: "eval.sameLanguage" },
+  { key: "faithful", label: "eval.faithful" },
+  { key: "citation_grounded", label: "eval.grounded" },
+  { key: "unanswerable_refused", label: "eval.find.refusal" },
+  { key: "answerable_refused", label: "eval.falseRefusal", lowerIsBetter: true },
+];
+
+function BeforeAfter({
+  before,
+  after,
+}: {
+  before: Partial<Record<BaselineKey, number | null>>;
+  after: Partial<Record<BaselineKey, number | null | undefined>>;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <table className="w-full max-w-[640px] text-left text-[13px]">
+        <caption className="sr-only">{t("eval.change.title")}</caption>
+        <thead>
+          <tr className="border-b border-mist text-[12px] text-muted">
+            <th className="py-2 pr-3 font-medium">{t("eval.metric")}</th>
+            <th className="px-3 py-2 text-right font-medium">{t("eval.change.before")}</th>
+            <th className="py-2 pl-3 text-right font-medium">{t("eval.change.after")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {CHANGE_ROWS.map((r) => (
+            <tr key={r.key} className="border-b border-mist/70">
+              <td className="py-2 pr-3">
+                {t(r.label)}
+                {r.lowerIsBetter && <span className="text-muted"> ({t("eval.change.lower")})</span>}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums text-muted">{pct(before[r.key])}</td>
+              <td className="py-2 pl-3 text-right font-semibold tabular-nums">{pct(after[r.key])}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function Figure({ value, label, detail }: { value: string; label: string; detail?: string }) {
   return (
@@ -128,6 +173,14 @@ export default function EvaluationPage() {
                 <span className="font-normal text-muted">({formatMs(s.generation.total_ms.p50)} median)</span>
               </h3>
               <StageBar stages={s.generation.latency_ms} />
+            </section>
+          )}
+
+          {s.generation && s.generation_baseline && (
+            <section className="mt-12">
+              <h2 className="text-[17px] font-semibold">{t("eval.change.title")}</h2>
+              <p className="mt-1 max-w-[72ch] text-[14px] text-muted">{t("eval.change.body")}</p>
+              <BeforeAfter before={s.generation_baseline} after={s.generation} />
             </section>
           )}
 

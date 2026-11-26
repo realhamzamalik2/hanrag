@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     min_vector_score: float = 0.35
     # Same idea for the reranker's 0..1 relevance probability (used in hybrid_rerank mode).
     min_rerank_score: float = 0.05
+    # Rerank each passage with the query variant (original or translation) in its language.
+    rerank_match_lang: bool = True
     retrieval_mode: str = "hybrid_rerank"  # vector | bm25 | hybrid | hybrid_rerank
     bm25_tokenizer: str = "kiwi"  # kiwi | whitespace
     # One extra LLM call per question: standalone rewrite (multi-turn) + ko<->en translation.

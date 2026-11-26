@@ -156,6 +156,7 @@ export interface EvalSummary {
     citation_grounded: number;
     faithful: number | null;
     judged: number;
+    same_language?: number;
     unanswerable_refused: number;
     answerable_refused: number;
     by_type: Record<string, { n: number; correct?: number; refused: number }>;
@@ -163,7 +164,17 @@ export interface EvalSummary {
     total_ms: { mean: number; p50: number; p95: number };
     retrieval_with_translation: RetrievalMetrics & { by_type: Record<string, RetrievalMetrics> };
   };
+  /** First run before the error-analysis fixes, kept for a before/after comparison. */
+  generation_baseline?: Partial<Record<BaselineKey, number | null>> & { n: number };
 }
+
+export type BaselineKey =
+  | "answer_correct"
+  | "faithful"
+  | "citation_grounded"
+  | "same_language"
+  | "unanswerable_refused"
+  | "answerable_refused";
 
 export interface Health {
   status: string;

@@ -1,7 +1,7 @@
 ﻿# Step 4: polish the index, then run the full evaluation (about 40 minutes on an 8 GB laptop).
 # Usage:  powershell -NoExit -ExecutionPolicy Bypass -File D:\projects\hanrag\scripts\run_eval.ps1
-#         add -RetrievalOnly to skip the Gemini part
-param([switch]$RetrievalOnly)
+#         add -RetrievalOnly to skip the Gemini part, -GenerationOnly to skip the retrieval ablation
+param([switch]$RetrievalOnly, [switch]$GenerationOnly)
 
 $Root = Split-Path -Parent $PSScriptRoot
 New-Item -ItemType Directory -Force "$Root\_bootstrap" | Out-Null
@@ -32,6 +32,8 @@ uv run pytest -q
 Write-Host "`n==== 3/3 Evaluation ====" -ForegroundColor Cyan
 if ($RetrievalOnly) {
     uv run python -m scripts.run_eval --retrieval
+} elseif ($GenerationOnly) {
+    uv run python -m scripts.run_eval --generation
 } else {
     uv run python -m scripts.run_eval
 }

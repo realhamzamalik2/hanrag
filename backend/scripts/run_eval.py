@@ -41,6 +41,7 @@ from app.evaluation import (
     retrieval_metrics,
     threshold_sweep,
 )
+from app.generation.prompts import PROMPT_VERSION
 from app.logging_setup import setup_logging
 
 EVAL_DIR = ROOT_DIR / "eval"
@@ -161,9 +162,9 @@ def run_generation(qs: list[EvalQuestion], use_judge: bool, pause: float) -> dic
     s = get_settings()
     config = {"mode": s.retrieval_mode, "tokenizer": s.bm25_tokenizer, "k": s.top_k_final,
               "rewrite": s.query_rewrite, "model": s.gemini_model,
-              "min_rerank_score": s.min_rerank_score, "embed": s.embed_model}
-    key = hashlib.sha1(json.dumps(config, sort_keys=True).encode()).hexdigest()[:10]
-    cache_file = CACHE / f"generation_{key}.json"
+              "min_rerank_score": s.min_rerank_score, "embed": s.embed_model,
+              "rerank_match_lang": s.rerank_match_lang, "prompt": PROMPT_VERSION}
+    cache_file = CACHE / f"generation_{_config_key(config)}.json"
     cache: dict[str, Any] = (json.loads(cache_file.read_text(encoding="utf-8"))
                              if cache_file.exists() else {})
 
@@ -228,6 +229,7 @@ def run_generation(qs: list[EvalQuestion], use_judge: bool, pause: float) -> dic
         "citation_grounded": rate([r.get("grounded") for r in answered]),
         "faithful": rate([r["judge"]["supported"] for r in judged]) if judged else None,
         "judged": len(judged),
+        "same_language": rate([_same_language(r) for r in answered]),
         "unanswerable_refused": rate([r["refused"] for r in una]),
         "answerable_refused": rate([r["refused"] for r in ans]),
         "by_type": by_type,
@@ -238,6 +240,33 @@ def run_generation(qs: list[EvalQuestion], use_judge: bool, pause: float) -> dic
                                                            {q.id: cache[q.id]["rank_translated"]
                                                             for q in qs if q.answerable})},
     }
+
+
+def _same_language(row: dict[str, Any]) -> bool:
+    """The answer is written in the question's language (citations and names aside)."""
+    from app.ingestion.korean import detect_lang
+
+    q = detect_lang(row["question"])
+    a = detect_lang(row["answer"])
+    return q == "mixed" or a == "mixed" or q == a
+
+
+def _config_key(config: dict[str, Any]) -> str:
+    return hashlib.sha1(json.dumps(config, sort_keys=True).encode()).hexdigest()[:10]
+
+
+def _baseline_same_language(config: dict[str, Any]) -> float | None:
+    """Recompute the language metric for a baseline saved before the metric existed."""
+    f = CACHE / f"generation_{_config_key(config)}.json"
+    if not f.exists():
+        return None
+    rows = [r for r in json.loads(f.read_text(encoding="utf-8")).values()
+            if r["type"] != "unanswerable" and not r["refused"]]
+    return round(sum(_same_language(r) for r in rows) / len(rows), 4) if rows else None
+
+
+BASELINE_KEYS = ("answer_correct", "faithful", "citation_grounded", "same_language",
+                 "unanswerable_refused", "answerable_refused")
 
 
 # ---------------------------------------------------------------- report
@@ -283,9 +312,22 @@ def write_markdown(summary: dict[str, Any]) -> None:
                   f"| Answerable wrongly refused | {pct(g['answerable_refused'])} |",
                   f"| Retrieval R@5 with query translation | {pct(rt['recall@5'])} "
                   f"(cross-lingual {pct(rt['by_type'].get('cross', {}).get('recall@5'))}) |",
+                  f"| Answer in the question's language | {pct(g.get('same_language'))} |",
                   f"| Median total time | {g['total_ms']['p50'] / 1000:.1f} s |", "",
                   "Mean time per stage: " + ", ".join(
                       f"{k} {v / 1000:.1f} s" for k, v in g["latency_ms"].items()), ""]
+    b = summary.get("generation_baseline")
+    if g and b:
+        labels = {"answer_correct": "Answer correct", "faithful": "Faithful (judge)",
+                  "citation_grounded": "Citation grounded",
+                  "same_language": "Answer in the question's language",
+                  "unanswerable_refused": "Unanswerable refused",
+                  "answerable_refused": "Answerable wrongly refused"}
+        lines += ["## Before and after the error-analysis fixes", "",
+                  f"Baseline config: {b['config']}", "",
+                  "| Metric | Baseline | Now |", "|---|---|---|"]
+        lines += [f"| {labels[k]} | {pct(b.get(k))} | {pct(g.get(k))} |" for k in BASELINE_KEYS]
+        lines.append("")
     (RESULTS / "RESULTS.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -322,7 +364,15 @@ def main() -> int:
         summary["retrieval"] = run_retrieval(qs)
     if do_g:
         log(f"End-to-end: {len(qs)} questions with the default pipeline")
+        previous = summary.get("generation")
         summary["generation"] = run_generation(qs, not args.no_judge, args.pause)
+        # Keep the first run with a different config as the baseline for a before/after table.
+        if (previous and "generation_baseline" not in summary
+                and previous["config"] != summary["generation"]["config"]):
+            if "same_language" not in previous:
+                previous["same_language"] = _baseline_same_language(previous["config"])
+            summary["generation_baseline"] = {k: previous.get(k) for k in
+                                              ("config", "n", *BASELINE_KEYS)}
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
     write_markdown(summary)
     log(f"\nSaved {summary_path} and {RESULTS / 'RESULTS.md'}")
