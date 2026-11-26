@@ -4,7 +4,9 @@
 
 Upload Korean and English documents (PDF, DOCX, TXT, Markdown, HWP/HWPX), ask questions in either language, and get answers with numbered citations (document + page + passage). HanRAG says "I don't know" when the documents don't support an answer, and shows exactly how retrieval worked.
 
-> Status: **Step 2 of 5**. Ingestion, hybrid search (Kiwi BM25 + bge-m3 + RRF), cross-encoder reranking, refusal, query rewriting and a streaming FastAPI backend are done. The Next.js UI and the evaluation study are in progress.
+> Status: **Step 4 of 5**. Backend, Next.js UI (documents, chat with clickable citations, retrieval debug panel) and a 50-question evaluation are done. Docker, deployment and a demo GIF come next.
+
+**Results on a 50-question Korean/English set:** retrieval Recall@5 95% (whitespace BM25: 65%), answers correct 95%, every answer cites the evidence passage, 9 of 10 unanswerable questions refused. [Details below](#evaluation).
 
 ## Why Korean needs special handling
 
@@ -25,9 +27,11 @@ INGEST   file ─► parser (PyMuPDF / python-docx / text / HWP) ─► NFC + sp
 QUERY    question + history
            ─► rewrite (1 LLM call): standalone follow-up + ko↔en translation
            ─► BM25 (Kiwi morphemes)  ┐
-           ─► bge-m3 vectors         ┴► Reciprocal Rank Fusion ─► bge-reranker-v2-m3 (top 20)
+           ─► bge-m3 vectors         ┴► Reciprocal Rank Fusion ─► bge-reranker-v2-m3 (top 12,
+                                                             each passage scored with the
+                                                             query in its own language)
            ─► gate: refuse early if the best passage is irrelevant (no LLM call)
-           ─► Gemini (streamed) with strict [n] citations or a refusal token
+           ─► Gemini (streamed), answer language fixed in code, strict [n] citations or refusal
            ─► citations validated against passages ─► trace saved (latency per stage)
 ```
 
@@ -41,11 +45,12 @@ QUERY    question + history
 | **int8 bge-m3** | The fp32 model needs about 2.3 GB of RAM and crashed next to the reranker on an 8 GB laptop. Dynamic int8 quantization cuts it to about 570 MB; the eval measures the quality cost. |
 | **Cross-encoder reranker** | Reads query and passage together, fixing ordering mistakes from both retrievers. Its 0 to 1 score also drives early refusal. |
 | **Query translation** | BM25 cannot match an English query to Korean text. Searching with both the question and its translation fixes that. |
+| **Language-matched reranking** | The cross-encoder scored an English question against Korean passages near 0, so the refusal gate rejected answerable questions. Each passage is now scored with the query variant in its own language: same number of pairs, no extra time. |
 | **Refusal gate + refusal token** | Clearly unanswerable questions are refused before calling the LLM (saves quota); borderline ones are refused by the model itself. |
 
 ## Tech stack
 
-Python 3.11, FastAPI, PostgreSQL 16 + pgvector, SQLAlchemy 2, Kiwi (kiwipiepy), BAAI/bge-m3 (int8 ONNX), BAAI/bge-reranker-v2-m3 (int8 ONNX via fastembed), Gemini API, Next.js + TypeScript + Tailwind + shadcn/ui.
+Python 3.11, FastAPI, PostgreSQL 16 + pgvector, SQLAlchemy 2, Kiwi (kiwipiepy), BAAI/bge-m3 (int8 ONNX), BAAI/bge-reranker-v2-m3 (int8 ONNX, run directly with onnxruntime), Gemini API, Next.js + TypeScript + Tailwind + shadcn/ui.
 
 Everything runs on CPU and fits on an 8 GB RAM laptop.
 
@@ -67,6 +72,60 @@ uv run python -m scripts.ask_cli "Who created Hangul?"                 # cross-l
 uv run python -m scripts.ask_cli "훈민정음 반포" --mode bm25 --tokenizer whitespace --no-llm
 ```
 
+## Evaluation
+
+50 questions written from the sample documents: 18 Korean, 12 English, 10 cross-lingual (English question on a Korean document or the reverse) and 10 unanswerable traps. A passage counts as relevant when it contains the question's evidence sentence; every evidence string was checked by code against the indexed text. Data: [`eval/dataset/qa.jsonl`](eval/dataset/qa.jsonl). Full numbers: [`eval/results/RESULTS.md`](eval/results/RESULTS.md).
+
+### Retrieval ablation
+
+Top 10 passages for the 40 answerable questions, no query translation, no LLM.
+
+| Configuration | Recall@1 | Recall@5 | MRR@10 | Korean R@5 | Cross-lingual R@5 | Median time |
+|---|---|---|---|---|---|---|
+| BM25, whitespace tokens | 45% | 65% | 0.533 | 61% | 30% | 0.0 s |
+| BM25, Kiwi morphemes | 52% | 78% | 0.614 | 89% | 30% | 0.0 s |
+| Vector (bge-m3 int8) | 50% | 95% | 0.705 | 94% | 90% | 0.1 s |
+| Hybrid RRF, Kiwi | 60% | 85% | 0.713 | 100% | 40% | 0.1 s |
+| **Hybrid RRF + reranker** | **78%** | **95%** | **0.841** | **100%** | 80% | 14.0 s |
+
+What it shows:
+- **Kiwi matters for Korean.** Korean Recall@5 for keyword search goes from 61% to 89% just by indexing morphemes instead of space-separated words.
+- **The reranker fixes ordering.** Recall@1 rises from 60% to 78% and MRR from 0.71 to 0.84. On a CPU laptop it costs about 11 s per question, the largest part of the latency.
+- **Translation closes the cross-lingual gap.** Keyword search cannot match English to Korean (30%). With the query translated as well, end-to-end retrieval reaches 100% Recall@5 on cross-lingual questions.
+
+### Answers, and what error analysis fixed
+
+The default pipeline (hybrid + reranker, query rewrite, Gemini `gemini-3.5-flash-lite`) answered all 50 questions. Reading the wrong answers of the first run found three problems:
+
+1. **Wrong language.** 7 English questions were answered correctly but in Korean, because most passages were Korean. The answer language is now detected in code and stated in the prompt.
+2. **Cross-lingual refusals.** The reranker scored an English question against Korean passages at 0.002 to 0.03, below the refusal gate. Each passage is now scored with the query in its own language.
+3. **Over-citation.** Answers cited extra passages on the same topic. The prompt now allows only passages that directly state the fact.
+
+| Metric | First run | After fixes |
+|---|---|---|
+| Answers with all required facts | 80% | **95%** |
+| Answers in the question's language | 76% | **100%** |
+| A cited passage contains the evidence | 97% | **100%** |
+| Answers supported by their citations (LLM judge) | 100% | 100% |
+| Answerable questions wrongly refused | 8% | **5%** |
+| Unanswerable questions refused | 100% | 90% |
+| Median time per question | 17.0 s | 15.1 s |
+
+Honest caveats:
+- **One hallucination.** "What was King Sejong's favorite food?" is a trap: the document only says he ate meat and took white rooster as a prescribed diet for diabetes. The model presented that as his "favorite food" with an invented detail. The question stays in the set.
+- **The two remaining false refusals** happened when the free Gemini tier returned 503 during query rewriting, so no translation was produced. The rewrite now retries once.
+- **The judge is the same model that answers**, so the faithfulness number is an indicator, not ground truth. An earlier judge bug (passages renumbered, so `[3]` pointed nowhere) made it report 73%; both runs were re-judged after the fix.
+- 50 questions over 9 documents is a small set: treat differences of one or two questions as noise.
+
+Run it yourself (about 40 minutes on an 8 GB laptop, about 140 free-tier Gemini calls, resumable):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\run_eval.ps1              # everything
+powershell -ExecutionPolicy Bypass -File scripts\run_eval.ps1 -RetrievalOnly   # no Gemini calls
+```
+
+The Evaluation page in the web app shows the same results as charts, plus live numbers from real questions.
+
 ## API
 
 Interactive docs at `http://localhost:8000/docs` (OpenAPI).
@@ -84,6 +143,7 @@ Interactive docs at `http://localhost:8000/docs` (OpenAPI).
 | `POST` | `/api/chat/stream` | Same, as Server-Sent Events: `rewrite`, `retrieval`, `token`, `done` |
 | `GET` | `/api/traces`, `/api/traces/{id}` | Per-question latency per stage, tokens, retrieved passages |
 | `GET` | `/api/stats`, `/api/health`, `/api/config` | Dashboard numbers and status |
+| `GET` | `/api/eval` | Saved evaluation results (`eval/results/summary.json`) |
 
 Chat, search and upload are rate limited (`RATE_LIMIT`, default 20/minute per IP).
 
