@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import statistics
 import sys
 import time
@@ -59,10 +60,13 @@ ARMS = [
 GROUPS = {"ko": ("ko",), "en": ("en",), "cross": ("cross_en_ko", "cross_ko_en")}
 THRESHOLDS = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5]
 
+JUDGE_VERSION = 2
+
 JUDGE_SYSTEM = """You check whether an answer is supported by source passages.
 Return JSON only: {"supported": true|false, "unsupported": ["claim", ...]}
 supported = true only if EVERY factual claim in the answer is stated in or directly implied
-by the passages. Ignore citation markers like [1]. Language differences do not matter."""
+by the passages. Language differences do not matter. Each passage is labelled with the
+number the answer uses to cite it."""
 
 
 def log(msg: str) -> None:
@@ -142,15 +146,58 @@ def _with_retries(fn, *args, tries: int = 4, **kwargs):  # type: ignore[no-untyp
     return None
 
 
-def judge(answer: str, passages: list[str]) -> dict[str, Any]:
+def cited_numbers(answer: str, n: int) -> list[int]:
+    """Citation numbers in order of first appearance, matching extract_citations()."""
+    seen: list[int] = []
+    for m in re.finditer(r"\[(\d+)\]", answer):
+        k = int(m.group(1))
+        if k not in seen:
+            seen.append(k)
+    return seen[:n]
+
+
+def judge(answer: str, passages: list[str], numbers: list[int] | None = None) -> dict[str, Any]:
+    """LLM judge. Passages keep the numbers the answer cites them by: renumbering them 1..n
+    made "[3]" point at nothing, and correct answers were marked unsupported."""
     from app.generation import llm
 
-    prompt = ("Passages:\n\n" + "\n\n".join(f"[{i}] {p}" for i, p in enumerate(passages, 1))
+    nums = numbers if numbers and len(numbers) == len(passages) else list(
+        range(1, len(passages) + 1))
+    prompt = ("Passages:\n\n" + "\n\n".join(f"[{k}] {p}" for k, p in zip(nums, passages,
+                                                                         strict=True))
               + f"\n\nAnswer:\n{answer}")
     text, _ = _with_retries(llm.generate_json, JUDGE_SYSTEM, prompt)
     data = json.loads(text)
     return {"supported": bool(data.get("supported")),
             "unsupported": data.get("unsupported") or []}
+
+
+def _rejudge(cache: dict[str, Any], cache_file: Any, pause: float) -> None:
+    """Re-judge answers judged by an older judge version (no new answers are generated)."""
+    stale = [r for r in cache.values()
+             if r.get("cited") and "judge" in r and r.get("judge_version") != JUDGE_VERSION]
+    if stale:
+        log(f"Re-judging {len(stale)} answers in {cache_file.name} with judge v{JUDGE_VERSION}")
+    for r in stale:
+        nums = r.get("cited_numbers") or cited_numbers(r["answer"], len(r["cited"]))
+        r["cited_numbers"] = nums
+        r["judge"] = _with_retries(judge, r["answer"], r["cited"], nums)
+        r["judge_version"] = JUDGE_VERSION
+        cache_file.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
+        log(f"  re-judged {r['id']}: supported={r['judge']['supported']}")
+        time.sleep(pause)
+
+
+def _rejudge_baseline(baseline: dict[str, Any], pause: float) -> None:
+    f = CACHE / f"generation_{_config_key(baseline['config'])}.json"
+    if not f.exists():
+        return
+    cache = json.loads(f.read_text(encoding="utf-8"))
+    _rejudge(cache, f, pause)
+    judged = [r for r in cache.values()
+              if r["type"] != "unanswerable" and not r["refused"] and "judge" in r]
+    if judged:
+        baseline["faithful"] = round(sum(r["judge"]["supported"] for r in judged) / len(judged), 4)
 
 
 def run_generation(qs: list[EvalQuestion], use_judge: bool, pause: float) -> dict[str, Any]:
@@ -179,6 +226,7 @@ def run_generation(qs: list[EvalQuestion], use_judge: bool, pause: float) -> dic
             "standalone": a.standalone_query,
             "translation": a.retrieval.extra_queries if a.retrieval else [],
             "cited": [c.chunk.text for c in a.citations],
+            "cited_numbers": [c.number for c in a.citations],
             "rank_translated": (first_relevant_rank([c.text for c in reranked], q.evidence)
                                 if q.answerable else None),
             "stages_ms": a.stages_ms, "total_ms": a.total_ms,
@@ -188,12 +236,16 @@ def run_generation(qs: list[EvalQuestion], use_judge: bool, pause: float) -> dic
             row["grounded"] = any(is_relevant(t, q.evidence) for t in row["cited"])
             if use_judge and row["cited"]:
                 time.sleep(pause)
-                row["judge"] = judge(a.answer, row["cited"])
+                row["judge"] = judge(a.answer, row["cited"], row["cited_numbers"])
+                row["judge_version"] = JUDGE_VERSION
         cache[q.id] = row
         cache_file.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
         log(f"  [{i}/{len(qs)}] {q.id} refused={a.refused} "
             f"correct={row.get('correct')} {a.total_ms / 1000:.1f}s")
         time.sleep(pause)
+
+    if use_judge:
+        _rejudge(cache, cache_file, pause)
 
     rows = [cache[q.id] for q in qs]
     ans = [r for r in rows if r["type"] != "unanswerable"]
@@ -373,6 +425,8 @@ def main() -> int:
                 previous["same_language"] = _baseline_same_language(previous["config"])
             summary["generation_baseline"] = {k: previous.get(k) for k in
                                               ("config", "n", *BASELINE_KEYS)}
+        if "generation_baseline" in summary and not args.no_judge:
+            _rejudge_baseline(summary["generation_baseline"], args.pause)
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
     write_markdown(summary)
     log(f"\nSaved {summary_path} and {RESULTS / 'RESULTS.md'}")

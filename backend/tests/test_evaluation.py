@@ -58,3 +58,10 @@ def test_dataset_json_lines(tmp_path: Path):
     p.write_text(json.dumps({"id": "a", "question": "q", "lang": "ko", "type": "unanswerable",
                              "answer": ""}) + "\n", encoding="utf-8")
     assert load_questions(p)[0].answerable is False
+
+
+def test_cited_numbers_keep_answer_numbering():
+    from scripts.run_eval import cited_numbers
+
+    assert cited_numbers("A [1][3]. B [3][5].", 3) == [1, 3, 5]
+    assert cited_numbers("no citations", 0) == []
