@@ -1,0 +1,55 @@
+# One-command HanRAG:  docker compose up --build   then open http://localhost:3000
+# Needs a .env with GEMINI_API_KEY and GEMINI_MODEL (see .env.example). Without it,
+# search and the retrieval debug panel work, answers do not.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: hanrag
+      POSTGRES_PASSWORD: hanrag_dev
+      POSTGRES_DB: hanrag
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hanrag -d hanrag"]
+      interval: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Override the laptop values in .env with container paths.
+      DATABASE_URL: postgresql+psycopg://hanrag:hanrag_dev@db:5432/hanrag
+      MODEL_CACHE_DIR: /models
+      DATA_DIR: /data
+      CORS_ORIGINS: http://localhost:3000
+    volumes:
+      - models:/models
+      - appdata:/data
+      - samples:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://api:8000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
+  models:
+  appdata:
+  samples:

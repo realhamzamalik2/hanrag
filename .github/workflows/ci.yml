@@ -11,8 +11,22 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: hanrag
+          POSTGRES_PASSWORD: hanrag_dev
+          POSTGRES_DB: hanrag_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hanrag -d hanrag_test"
+          --health-interval 5s --health-retries 20
+    env:
+      # conftest.py appends _test, so tests run on hanrag_test.
+      DATABASE_URL: postgresql+psycopg://hanrag:hanrag_dev@localhost:5432/hanrag
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -20,5 +34,47 @@ jobs:
         run: uv sync
       - name: Lint
         run: uv run ruff check .
-      - name: Unit tests (no models, no DB)
-        run: uv run pytest -q -m "not models and not db"
+      - name: Tests (unit + database; real models are not downloaded)
+        run: uv run pytest -q -m "not models"
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build images
+        run: docker compose build
+      - name: Start the stack
+        run: docker compose up -d
+      - name: Smoke test (API, proxy through the web app, saved eval results)
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8000/api/health && break
+            sleep 3
+          done
+          curl -fsS http://localhost:3000/api/health
+          curl -fsS http://localhost:3000/api/eval | head -c 300; echo
+          curl -fsS -o /dev/null -w "evaluation page: %{http_code}\n" http://localhost:3000/evaluation
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail 200
+      - name: Stop
+        if: always()
+        run: docker compose down -v
