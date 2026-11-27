@@ -4,7 +4,7 @@
 
 Upload Korean and English documents (PDF, DOCX, TXT, Markdown, HWP/HWPX), ask questions in either language, and get answers with numbered citations (document + page + passage). HanRAG says "I don't know" when the documents don't support an answer, and shows exactly how retrieval worked.
 
-> Status: **Step 4 of 5**. Backend, Next.js UI (documents, chat with clickable citations, retrieval debug panel) and a 50-question evaluation are done. Docker, deployment and a demo GIF come next.
+> Status: backend, Next.js UI (documents, chat with clickable citations, retrieval debug panel), a 50-question evaluation and Docker Compose are done. A demo GIF comes next.
 
 **Results on a 50-question Korean/English set:** retrieval Recall@5 95% (whitespace BM25: 65%), answers correct 95%, every answer cites the evidence passage, 9 of 10 unanswerable questions refused. [Details below](#evaluation).
 
@@ -71,6 +71,20 @@ uv run python -m scripts.ask_cli "한글은 누가 만들었나요?" --debug
 uv run python -m scripts.ask_cli "Who created Hangul?"                 # cross-lingual
 uv run python -m scripts.ask_cli "훈민정음 반포" --mode bm25 --tokenizer whitespace --no-llm
 ```
+
+## Run it with Docker
+
+Needs Docker and about 4 GB of free RAM. Everything stays on CPU.
+
+```bash
+cp .env.example .env              # add GEMINI_API_KEY and GEMINI_MODEL
+docker compose up --build         # Postgres + pgvector, API on :8000, web app on :3000
+# optional: download and index the 9 openly licensed sample documents
+docker compose exec api python -m scripts.fetch_samples
+docker compose exec api python -m scripts.ingest_cli /app/data/samples
+```
+
+Open http://localhost:3000. The first start downloads the two models (about 1.2 GB) into a Docker volume. CI builds both images, starts the stack and checks the API, the web proxy and the Evaluation page on every push.
 
 ## Evaluation
 
