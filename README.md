@@ -6,7 +6,7 @@ Upload Korean and English documents (PDF, DOCX, TXT, Markdown, HWP/HWPX), ask qu
 
 ![HanRAG demo: a Korean question with citations, a highlighted PDF passage, an English question on Korean documents, the retrieval panel, a refusal and the evaluation page](docs/demo.gif)
 
-<sub>40-second demo, recorded on an 8 GB CPU-only laptop. [MP4 version](docs/demo.mp4).</sub>
+<sub>50-second demo on an 8 GB CPU-only laptop (waiting time cut). [HD MP4](docs/demo.mp4).</sub>
 
 **Results on a 50-question Korean/English set:** retrieval Recall@5 95% (whitespace BM25: 65%), answers correct 95%, every answer cites the evidence passage, 9 of 10 unanswerable questions refused. [Details below](#evaluation).
 
