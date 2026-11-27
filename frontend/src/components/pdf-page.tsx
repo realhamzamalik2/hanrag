@@ -62,26 +62,22 @@ export default function PdfPage({
         spans.push([page.length, page.length + s.length]);
         page += s;
       }
-      // Find the passage by its opening and closing words (robust to small extraction diffs).
-      const findPrefix = (text: string, from = 0) => {
-        for (const n of [40, 24, 12]) {
-          if (text.length < n) continue;
-          const i = page.indexOf(text.slice(0, n), from);
-          if (i !== -1) return i;
-        }
-        return page.indexOf(text, from);
-      };
-      const start = findPrefix(target);
-      if (start === -1) return setMarked(new Set());
-      let end = start + target.length;
-      for (const n of [40, 24, 12]) {
-        if (target.length < n) continue;
-        const j = page.indexOf(target.slice(-n), start);
-        if (j !== -1) {
-          end = j + n;
-          break;
-        }
+      // Find the passage by its opening and closing words. Slide a window along the passage,
+      // because its first words may not sit next to the rest on the page (a title above a
+      // printed source line, for example), and extraction can differ slightly at the edges.
+      const W = 16;
+      let start = -1;
+      for (let k = 0; k + W <= target.length && start === -1; k += 8) {
+        start = page.indexOf(target.slice(k, k + W));
       }
+      if (start === -1) start = page.indexOf(target);
+      if (start === -1) return setMarked(new Set());
+      let end = -1;
+      for (let k = target.length; k - W >= 0 && end === -1; k -= 8) {
+        const j = page.indexOf(target.slice(k - W, k), start);
+        if (j !== -1) end = j + W;
+      }
+      if (end === -1) end = Math.min(page.length, start + target.length);
       const hit = new Set<number>();
       spans.forEach(([a, b], i) => {
         if (b > a && a < end && b > start) hit.add(i);
