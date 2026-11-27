@@ -71,8 +71,9 @@ function Findings({ s }: { s: EvalSummary }) {
   const arm = (id: string): EvalArm | undefined => s.retrieval?.arms.find((a) => a.id === id);
   const ws = arm("bm25_ws")?.by_type.ko?.["recall@5"];
   const kiwi = arm("bm25_kiwi")?.by_type.ko?.["recall@5"];
-  const vec = arm("vector")?.overall["recall@5"];
-  const full = arm("hybrid_rerank")?.overall["recall@5"];
+  // The reranker's gain is ordering (the right passage first), so compare Recall@1.
+  const vec = arm("vector")?.overall["recall@1"];
+  const full = arm("hybrid_rerank")?.overall["recall@1"];
   const crossBefore = arm("hybrid_rerank")?.by_type.cross?.["recall@5"];
   const crossAfter = s.generation?.retrieval_with_translation.by_type.cross?.["recall@5"];
   const items: { value: string; label: string; detail?: string }[] = [];
