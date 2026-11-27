@@ -12,8 +12,9 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
+  // translate="no": browser auto-translation would rewrite quoted passages and citations.
   return (
-    <html lang="ko" suppressHydrationWarning>
+    <html lang="ko" translate="no" suppressHydrationWarning>
       <body>
         <Providers>
           <AppShell>{children}</AppShell>
