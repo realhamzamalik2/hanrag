@@ -4,7 +4,9 @@
 
 Upload Korean and English documents (PDF, DOCX, TXT, Markdown, HWP/HWPX), ask questions in either language, and get answers with numbered citations (document + page + passage). HanRAG says "I don't know" when the documents don't support an answer, and shows exactly how retrieval worked.
 
-> Status: backend, Next.js UI (documents, chat with clickable citations, retrieval debug panel), a 50-question evaluation and Docker Compose are done. A demo GIF comes next.
+![HanRAG demo: a Korean question with citations, a highlighted PDF passage, an English question on Korean documents, the retrieval panel, a refusal and the evaluation page](docs/demo.gif)
+
+<sub>40-second demo, recorded on an 8 GB CPU-only laptop. [MP4 version](docs/demo.mp4).</sub>
 
 **Results on a 50-question Korean/English set:** retrieval Recall@5 95% (whitespace BM25: 65%), answers correct 95%, every answer cites the evidence passage, 9 of 10 unanswerable questions refused. [Details below](#evaluation).
 
